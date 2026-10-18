@@ -9,9 +9,9 @@ use app::IgnixApp;
 fn main() -> eframe::Result<()> {
     let opts = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 700.0])
-            .with_min_inner_size([900.0, 600.0])
-            .with_title("Ignix V2 Configurator"),
+            .with_inner_size([1280.0, 800.0])
+            .with_min_inner_size([1024.0, 640.0])
+            .with_title("IGNIX V2 — Linux Configurator"),
         ..Default::default()
     };
     eframe::run_native(

@@ -8,33 +8,35 @@ use std::thread;
 use crate::device::Mouse;
 use crate::protocol::{self, ButtonMap, DpiConfig, LightConfig, LightMode, F5V2_BUTTONS};
 
-// ---------------------------------------------------------------- theme (DESIGN_REF §2)
+// ---------------------------------------------------------------- theme (Swiss poster)
 
-pub const BG: egui::Color32 = egui::Color32::from_rgb(0x0e, 0x0e, 0x13);
-pub const PANEL: egui::Color32 = egui::Color32::from_rgb(0x14, 0x14, 0x1c);
-pub const CARD: egui::Color32 = egui::Color32::from_rgb(0x1b, 0x1b, 0x26);
-pub const CARD_HOVER: egui::Color32 = egui::Color32::from_rgb(0x23, 0x23, 0x2f);
-pub const BORDER: egui::Color32 = egui::Color32::from_rgb(0x2a, 0x2a, 0x38);
-pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x00, 0xd4, 0xff);
-pub fn accent_dim() -> egui::Color32 {
-    egui::Color32::from_rgba_unmultiplied(0, 212, 255, 36)
-}
-pub const TEXT: egui::Color32 = egui::Color32::from_rgb(0xec, 0xec, 0xf1);
-pub const DIM: egui::Color32 = egui::Color32::from_rgb(0x8b, 0x8b, 0x98);
-pub const FAINT: egui::Color32 = egui::Color32::from_rgb(0x55, 0x55, 0x5f);
-pub const GOOD: egui::Color32 = egui::Color32::from_rgb(0x3d, 0xdc, 0x84);
-pub const WARN: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb0, 0x20);
-pub const BAD: egui::Color32 = egui::Color32::from_rgb(0xff, 0x55, 0x66);
+pub const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x00, 0x00, 0xFF); // saturated blue
+pub const PAPER: egui::Color32 = egui::Color32::from_rgb(0xF4, 0xF1, 0xEB); // warm off-white
+pub const INK: egui::Color32 = egui::Color32::from_rgb(0x11, 0x11, 0x11);   // near black
+pub const WHITE: egui::Color32 = egui::Color32::WHITE;
+pub const DIM: egui::Color32 = egui::Color32::from_rgb(0x6E, 0x6A, 0x63);   // warm gray
+pub const HAIRLINE: egui::Color32 = egui::Color32::from_rgb(0xD8, 0xD4, 0xC8);
+pub const FAINT: egui::Color32 = egui::Color32::from_rgb(0xA8, 0xA4, 0x9A);
 
 // Mouse photo hotspot fractions (x, y, w, h) over the image rect.
-// Tuned against ignix-f5-black-official.webp (top-down, 1500x2606).
+// Tuned against mouse-white-hd.png (1250x2337, transparent bg).
+// Order matches mockup numbering: 01 left, 02 right, 03 wheel, 04 back, 05 forward, 06 dpi.
 const HOTSPOTS: [(usize, (f32, f32, f32, f32)); 6] = [
-    (0, (0.06, 0.02, 0.40, 0.38)),  // left click (left wing)
-    (1, (0.54, 0.02, 0.40, 0.38)),  // right click (right wing)
-    (2, (0.43, 0.12, 0.14, 0.16)),  // scroll wheel
-    (8, (0.45, 0.31, 0.10, 0.05)),  // DPI button (in groove below wheel)
-    (3, (0.015, 0.36, 0.075, 0.09)), // side back (upper)
-    (4, (0.015, 0.47, 0.075, 0.11)), // side forward (lower)
+    (0, (0.10, 0.03, 0.36, 0.36)),    // 01 left click
+    (1, (0.54, 0.03, 0.36, 0.36)),    // 02 right click
+    (2, (0.44, 0.075, 0.12, 0.115)),  // 03 scroll wheel
+    (3, (0.055, 0.235, 0.075, 0.075)),// 04 side back (upper)
+    (4, (0.055, 0.325, 0.075, 0.095)),// 05 side forward (lower)
+    (8, (0.445, 0.20, 0.11, 0.10)),   // 06 DPI button (pill below wheel)
+];
+// Callout label side per button: true = label on left, false = on right.
+const CALLOUT_SIDE: [(usize, bool); 6] = [
+    (0, true), (1, false), (2, false), (3, true), (4, true), (8, false),
+];
+// Display names for callouts (short, uppercase).
+const CALLOUT_NAMES: [(usize, &str); 6] = [
+    (0, "LEFT CLICK"), (1, "RIGHT CLICK"), (2, "WHEEL CLICK"),
+    (3, "BACK"), (4, "FORWARD"), (8, "DPI CYCLE"),
 ];
 
 // ---------------------------------------------------------------- tabs
@@ -126,26 +128,62 @@ impl IgnixApp {
 
     fn style(cc: &eframe::CreationContext<'_>) {
         let mut s = (*cc.egui_ctx.style()).clone();
-        s.visuals.dark_mode = true;
-        s.visuals.panel_fill = PANEL;
-        s.visuals.window_fill = PANEL;
-        s.visuals.extreme_bg_color = BG;
-        s.visuals.widgets.noninteractive.bg_fill = CARD;
-        s.visuals.widgets.inactive.bg_fill = CARD;
-        s.visuals.widgets.hovered.bg_fill = CARD_HOVER;
-        s.visuals.widgets.active.bg_fill = CARD_HOVER;
-        s.visuals.widgets.inactive.rounding = egui::Rounding::same(8.0);
-        s.visuals.widgets.hovered.rounding = egui::Rounding::same(8.0);
-        s.visuals.widgets.active.rounding = egui::Rounding::same(8.0);
+        // Swiss poster: radius 0 everywhere, no shadows.
+        let zero = egui::Rounding::ZERO;
+        s.visuals.dark_mode = false;
+        s.visuals.panel_fill = PAPER;
+        s.visuals.window_fill = PAPER;
+        s.visuals.extreme_bg_color = PAPER;
+        s.visuals.widgets.noninteractive.rounding = zero;
+        s.visuals.widgets.inactive.rounding = zero;
+        s.visuals.widgets.hovered.rounding = zero;
+        s.visuals.widgets.active.rounding = zero;
+        s.visuals.widgets.open.rounding = zero;
+        s.visuals.window_rounding = zero;
+        s.visuals.menu_rounding = zero;
+        s.visuals.window_shadow = egui::epaint::Shadow::NONE;
+        s.visuals.popup_shadow = egui::epaint::Shadow::NONE;
+        s.visuals.widgets.noninteractive.bg_fill = PAPER;
+        s.visuals.widgets.inactive.bg_fill = PAPER;
+        s.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(0xE8, 0xE4, 0xD8);
+        s.visuals.widgets.active.bg_fill = INK;
         s.visuals.selection.bg_fill = ACCENT;
+        s.visuals.selection.stroke = egui::Stroke::new(1.0, WHITE);
         s.visuals.hyperlink_color = ACCENT;
-        s.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        s.spacing.button_padding = egui::vec2(12.0, 6.0);
+        // Hairline separators
+        s.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, HAIRLINE);
+        s.spacing.item_spacing = egui::vec2(10.0, 10.0);
+        s.spacing.button_padding = egui::vec2(14.0, 8.0);
+
+        // Custom fonts: Archivo Black (display) + Space Mono (mono).
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert("display".into(),
+            egui::FontData::from_owned(include_bytes!("../assets/fonts/ArchivoBlack-Regular.ttf").to_vec()));
+        fonts.font_data.insert("mono".into(),
+            egui::FontData::from_owned(include_bytes!("../assets/fonts/SpaceMono-Regular.ttf").to_vec()));
+        fonts.font_data.insert("mono_bold".into(),
+            egui::FontData::from_owned(include_bytes!("../assets/fonts/SpaceMono-Bold.ttf").to_vec()));
+        fonts.families.insert(egui::FontFamily::Name("display".into()), vec!["display".into()]);
+        fonts.families.insert(egui::FontFamily::Name("mono".into()), vec!["mono".into()]);
+        fonts.families.insert(egui::FontFamily::Name("mono_bold".into()), vec!["mono_bold".into()]);
+        // Make monospace the default for that typewriter feel on labels.
+        fonts.families.get_mut(&egui::FontFamily::Monospace).unwrap().insert(0, "mono".into());
+        cc.egui_ctx.set_fonts(fonts);
         cc.egui_ctx.set_style(s);
     }
 
+    fn display_font(size: f32) -> egui::FontId {
+        egui::FontId::new(size, egui::FontFamily::Name("display".into()))
+    }
+    fn mono_font(size: f32) -> egui::FontId {
+        egui::FontId::new(size, egui::FontFamily::Name("mono".into()))
+    }
+    fn mono_bold_font(size: f32) -> egui::FontId {
+        egui::FontId::new(size, egui::FontFamily::Name("mono_bold".into()))
+    }
+
     fn load_mouse_texture(cc: &eframe::CreationContext<'_>) -> Option<egui::TextureHandle> {
-        let bytes = include_bytes!("../assets/mouse-top.png");
+        let bytes = include_bytes!("../assets/mouse-white-hd.png");
         let img = image::load_from_memory(bytes).ok()?;
         let rgba = img.to_rgba8();
         let (w, h) = (rgba.width() as usize, rgba.height() as usize);
@@ -226,18 +264,6 @@ impl IgnixApp {
     }
 
     fn mark_dirty(&mut self) { self.dirty = true; }
-
-    fn card_frame(selected: bool) -> egui::Frame {
-        let mut f = egui::Frame::none()
-            .inner_margin(egui::Margin::same(10.0))
-            .rounding(egui::Rounding::same(8.0))
-            .fill(CARD)
-            .stroke(egui::Stroke::new(1.0f32, BORDER));
-        if selected {
-            f = f.stroke(egui::Stroke::new(2.0f32, ACCENT)).fill(accent_dim());
-        }
-        f
-    }
 }
 
 // ---------------------------------------------------------------- eframe
@@ -246,174 +272,179 @@ impl eframe::App for IgnixApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_jobs();
 
-        // ---- top bar
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                // Logo mark: cyan square with mouse icon text
-                let (r, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
-                ui.painter().rect_filled(r, 6.0, ACCENT);
-                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "V2",
-                    egui::FontId::proportional(13.0), egui::Color32::from_rgb(0x0e, 0x0e, 0x13));
-                ui.add_space(4.0);
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("IGNIX V2").size(16.0).strong().color(TEXT));
-                    ui.label(egui::RichText::new("Linux Configurator").size(10.0).color(DIM));
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.connected {
-                        // Status pill
-                        let pill = Self::card_frame(false);
-                        pill.show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.colored_label(GOOD, "●");
-                                ui.label(egui::RichText::new("Connected").size(11.0).color(GOOD));
-                                ui.add_space(8.0);
-                                ui.label(egui::RichText::new(format!("FW {}", self.firmware)).size(11.0).color(DIM));
-                                ui.label(egui::RichText::new(format!("P{}", self.profile_id)).size(11.0).color(ACCENT));
-                            });
-                        });
-                    } else if self.connecting {
-                        ui.spinner(); ui.label(egui::RichText::new("Connecting…").size(11.0).color(DIM));
-                    } else {
-                        let pill = Self::card_frame(false);
-                        pill.show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.colored_label(BAD, "●");
-                                ui.label(egui::RichText::new("Disconnected").size(11.0).color(BAD));
-                                if ui.small_button("Retry").clicked() { self.spawn_connect(); }
-                            });
-                        });
-                    }
-                });
-            });
-            ui.add_space(4.0);
-        });
+        // ---- left: blue panel, title, mouse photo, footer label
+        egui::SidePanel::left("mouse")
+            .resizable(false)
+            .exact_width(380.0)
+            .frame(egui::Frame::none().fill(ACCENT))
+            .show(ctx, |ui| {
+                // Override text colors for blue bg via local visuals
+                let mut v = ui.style().visuals.clone();
+                v.override_text_color = Some(WHITE);
+                ui.style_mut().visuals = v;
 
-        // ---- bottom bar
-        egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(&self.status_msg).size(11.0)
-                    .color(if self.status_ok { DIM } else { BAD }));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.applying { ui.spinner(); }
-                    if self.dirty && !self.applying {
-                        ui.colored_label(WARN, "● Unsaved");
-                    }
-                    let btn = egui::Button::new(
-                        egui::RichText::new(if self.applying { "Applying…" } else { "Apply to Mouse" }).strong()
-                    ).fill(if self.dirty && !self.applying { ACCENT } else { CARD });
-                    let resp = ui.add_enabled(
-                        self.connected && self.dirty && !self.applying && !self.connecting, btn
-                    );
-                    if resp.clicked() {
-                        self.status_msg = "Writing to device…".into();
-                        self.status_ok = true;
-                        self.spawn_apply();
-                    }
-                });
-            });
-        });
-
-        // ---- left: mouse photo + hotspots
-        egui::SidePanel::left("mouse").resizable(false).exact_width(300.0).show(ctx, |ui| {
-            ui.add_space(8.0);
-            ui.vertical_centered(|ui| {
-                ui.label(egui::RichText::new("Mouse").size(15.0).strong());
-            });
-            ui.add_space(4.0);
-            // Reserve fixed height for image so info below never overlaps.
-            let img_h = 330.0;
-            let (img_rect_alloc, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), img_h), egui::Sense::hover());
-            // Render image inside a child UI clipped to that rect.
-            let mut img_ui = ui.child_ui(img_rect_alloc, *ui.layout(), None);
-            self.ui_mouse_photo(&mut img_ui);
-            ui.add_space(8.0);
-            // Device info card
-            Self::card_frame(false).show(ui, |ui| {
-                ui.set_min_width(ui.available_width() - 16.0);
-                if let Some(&v) = self.dpi.dpis.get(self.dpi.active) {
-                    let c = self.dpi.colors.get(self.dpi.active).copied().unwrap_or([255,255,255]);
-                    ui.horizontal(|ui| {
-                        let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                        ui.painter().circle_filled(r.center(), 6.0,
-                            egui::Color32::from_rgb(c[0], c[1], c[2]));
-                        ui.vertical(|ui| {
-                            ui.label(egui::RichText::new(format!("{v}")).size(24.0).strong());
-                            ui.label(egui::RichText::new("DPI").size(10.0).color(DIM));
-                        });
-                    });
-                }
-                ui.add_space(4.0);
+                ui.add_space(28.0);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{} Hz", self.rate)).size(13.0).color(DIM));
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new(format!("FW {}", self.firmware)).size(11.0).color(DIM));
+                    ui.add_space(28.0);
+                    ui.label(egui::RichText::new("IGNIX V2")
+                        .font(Self::display_font(34.0)).color(WHITE));
+                });
+                ui.add_space(8.0);
+                // Mouse photo with callouts fills the middle
+                let avail_h = ui.available_height() - 80.0;
+                let (r, _) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), avail_h.max(200.0)), egui::Sense::hover());
+                let mut img_ui = ui.child_ui(r, *ui.layout(), None);
+                // blue bg for the child too
+                let mut v2 = img_ui.style().visuals.clone();
+                v2.override_text_color = Some(WHITE);
+                img_ui.style_mut().visuals = v2;
+                self.ui_mouse_photo(&mut img_ui);
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                    ui.add_space(24.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(28.0);
+                        ui.label(egui::RichText::new("LINUX CONFIGURATOR")
+                            .font(Self::mono_font(11.0)).color(WHITE));
+                    });
                 });
             });
-        });
 
-        // ---- center: tabs + content
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                for &t in Tab::all() {
-                    let sel = self.tab == t;
-                    let lbl = if sel {
-                        egui::RichText::new(t.label()).size(14.0).color(TEXT).strong()
+        // ---- right: paper panel
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(PAPER).inner_margin(egui::Margin::same(28.0)))
+            .show(ctx, |ui| {
+                // Status line (mono, uppercase)
+                let status = if self.connected {
+                    format!("USB WIRED  /  FW {}  /  BATTERY --", self.firmware)
+                } else if self.connecting {
+                    "CONNECTING...".to_string()
+                } else {
+                    "NO DEVICE".to_string()
+                };
+                ui.label(egui::RichText::new(status)
+                    .font(Self::mono_font(11.0)).color(DIM));
+                ui.add_space(14.0);
+
+                // Tabs: flat, active = black fill
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                    for &t in Tab::all() {
+                        let sel = self.tab == t;
+                        let txt = egui::RichText::new(t.label().to_uppercase())
+                            .font(Self::mono_font(12.0))
+                            .color(if sel { WHITE } else { INK });
+                        let btn = egui::Button::new(txt)
+                            .fill(if sel { INK } else { PAPER })
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::vec2(0.0, 34.0));
+                        if ui.add(btn).clicked() { self.tab = t; }
+                    }
+                });
+                // Hairline under tabs
+                let r = ui.available_rect_before_wrap();
+                ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, INK));
+                ui.add_space(20.0);
+
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    if !self.connected && !self.connecting {
+                        self.ui_empty(ui);
+                        return;
+                    }
+                    match self.tab {
+                        Tab::Dpi => self.ui_dpi(ui),
+                        Tab::Buttons => self.ui_buttons(ui),
+                        Tab::Lighting => self.ui_lighting(ui),
+                        Tab::Performance => self.ui_performance(ui),
+                        Tab::Macros => self.ui_macros(ui),
+                    }
+                });
+            });
+
+        // ---- footer
+        egui::TopBottomPanel::bottom("bottom")
+            .frame(egui::Frame::none().fill(PAPER)
+                .inner_margin(egui::Margin { left: 28.0, right: 28.0, top: 12.0, bottom: 16.0 }))
+            .show(ctx, |ui| {
+                let r = ui.available_rect_before_wrap();
+                ui.painter().hline(r.x_range(), r.top() - 12.0, egui::Stroke::new(1.0, INK));
+                ui.horizontal(|ui| {
+                    if self.dirty {
+                        ui.label(egui::RichText::new("1 UNSAVED CHANGE")
+                            .font(Self::mono_font(11.0)).color(ACCENT));
                     } else {
-                        egui::RichText::new(t.label()).size(14.0).color(DIM)
-                    };
-                    if ui.selectable_label(sel, lbl).clicked() { self.tab = t; }
-                }
-            });
-            ui.add_space(4.0);
-            ui.separator();
-            ui.add_space(8.0);
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                // Not connected? show empty state.
-                if !self.connected && !self.connecting {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(50.0);
-                        // Icon: large disconnected symbol
-                        let (r, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
-                        ui.painter().circle_stroke(r.center(), 28.0, egui::Stroke::new(2.0, FAINT));
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "!",
-                            egui::FontId::proportional(28.0), FAINT);
-                        ui.add_space(12.0);
-                        ui.label(egui::RichText::new("Mouse not found").size(20.0).strong().color(TEXT));
-                        ui.add_space(8.0);
-                        Self::card_frame(false).show(ui, |ui| {
-                            ui.set_min_width(320.0);
-                            ui.label(egui::RichText::new("Troubleshooting").size(12.0).strong().color(ACCENT));
-                            ui.add_space(4.0);
-                            for tip in [
-                                "1. Plug in via USB cable (wired mode)",
-                                "2. Install udev rule: see README",
-                                "3. Or run with sudo (not recommended)",
-                            ] {
-                                ui.label(egui::RichText::new(tip).size(12.0).color(DIM));
-                            }
-                        });
-                        ui.add_space(16.0);
-                        if ui.button(egui::RichText::new("Retry Connection").size(13.0)).clicked() {
-                            self.spawn_connect();
+                        ui.label(egui::RichText::new("ALL CHANGES SAVED")
+                            .font(Self::mono_font(11.0)).color(DIM));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let apply_txt = if self.applying { "APPLYING..." } else { "APPLY TO MOUSE →" };
+                        let btn = egui::Button::new(
+                            egui::RichText::new(apply_txt).font(Self::mono_bold_font(12.0)).color(WHITE)
+                        ).fill(INK).min_size(egui::vec2(180.0, 40.0));
+                        let resp = ui.add_enabled(
+                            self.connected && self.dirty && !self.applying && !self.connecting, btn);
+                        if resp.clicked() {
+                            self.status_msg = "Writing to device...".into();
+                            self.status_ok = true;
+                            self.spawn_apply();
                         }
+                        if self.dirty {
+                            let rt = egui::RichText::new("Reset").font(Self::mono_font(12.0))
+                                .color(INK).underline();
+                            if ui.button(rt).clicked() {
+                                self.spawn_connect(); // re-read from device = reset
+                            }
+                        }
+                        if self.applying { ui.spinner(); }
                     });
-                    return;
-                }
-                match self.tab {
-                    Tab::Dpi => self.ui_dpi(ui),
-                    Tab::Buttons => self.ui_buttons(ui),
-                    Tab::Lighting => self.ui_lighting(ui),
-                    Tab::Performance => self.ui_performance(ui),
-                    Tab::Macros => self.ui_macros(ui),
+                });
+                if !self.status_ok {
+                    ui.label(egui::RichText::new(self.status_msg.to_uppercase())
+                        .font(Self::mono_font(10.0)).color(DIM));
                 }
             });
-        });
 
         if self.show_button_picker { self.ui_button_picker(ctx); }
         ctx.request_repaint_after(std::time::Duration::from_millis(400));
+    }
+}
+
+impl IgnixApp {
+    fn ui_empty(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(40.0);
+        ui.label(egui::RichText::new("NO DEVICE FOUND")
+            .font(Self::display_font(28.0)).color(INK));
+        ui.add_space(12.0);
+        ui.label(egui::RichText::new("TROUBLESHOOTING")
+            .font(Self::mono_bold_font(11.0)).color(ACCENT));
+        ui.add_space(6.0);
+        for tip in [
+            "01  PLUG IN VIA USB CABLE (WIRED MODE)",
+            "02  INSTALL UDEV RULE — SEE README",
+            "03  OR RUN WITH SUDO (NOT RECOMMENDED)",
+        ] {
+            ui.label(egui::RichText::new(tip).font(Self::mono_font(11.0)).color(DIM));
+        }
+        ui.add_space(20.0);
+        let btn = egui::Button::new(
+            egui::RichText::new("RETRY CONNECTION").font(Self::mono_bold_font(12.0)).color(WHITE)
+        ).fill(INK).min_size(egui::vec2(200.0, 40.0));
+        if ui.add(btn).clicked() { self.spawn_connect(); }
+    }
+
+    /// Thin horizontal rule.
+    fn hairline(ui: &mut egui::Ui) {
+        ui.add_space(8.0);
+        let r = ui.available_rect_before_wrap();
+        ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, HAIRLINE));
+        ui.add_space(8.0);
+    }
+
+    /// Section heading: mono uppercase.
+    fn section(ui: &mut egui::Ui, title: &str) {
+        ui.label(egui::RichText::new(title).font(Self::mono_bold_font(11.0)).color(DIM));
+        ui.add_space(6.0);
     }
 }
 
@@ -425,13 +456,14 @@ impl IgnixApp {
             Some(t) => t.clone(),
             None => { ui.label("no image"); return; }
         };
-        // Fit image within available space, keep aspect, NO cropping.
+        // Fit image, leave margins for callout labels.
         let (iw, ih) = (tex.size()[0] as f32, tex.size()[1] as f32);
         let avail = ui.available_size();
-        let scale = (avail.x / iw).min(avail.y / ih).min(1.0);
+        let margin = 78.0; // room for callouts on each side
+        let avail_w = (avail.x - margin * 2.0).max(120.0);
+        let scale = (avail_w / iw).min(avail.y / ih).min(1.0);
         let w = iw * scale;
         let h = ih * scale;
-        // Center horizontally.
         let x_off = (avail.x - w) / 2.0;
         let (rect, _) = ui.allocate_exact_size(egui::vec2(avail.x, h), egui::Sense::hover());
         let img_rect = egui::Rect::from_min_size(
@@ -443,43 +475,65 @@ impl IgnixApp {
             egui::Color32::WHITE);
 
         let mut clicked: Option<usize> = None;
-        for (idx, (fx, fy, fw, fh)) in HOTSPOTS {
+        let p = ui.painter().clone();
+        for (n, (idx, (fx, fy, fw, fh))) in HOTSPOTS.iter().enumerate() {
+            let idx = *idx;
             let r = egui::Rect::from_min_size(
                 img_rect.min + egui::vec2(fx * img_rect.width(), fy * img_rect.height()),
                 egui::vec2(fw * img_rect.width(), fh * img_rect.height()),
             );
+            let btn_name = F5V2_BUTTONS.iter().find(|(i,_)| *i==idx).map(|(_,n)|*n).unwrap_or("?");
+            let func_name = protocol::ButtonFunc::name(self.buttons.slots[idx].0);
             let resp = ui.allocate_rect(r, egui::Sense::click())
-                .on_hover_text(format!("{} — {}",
-                    F5V2_BUTTONS.iter().find(|(i,_)| *i==idx).map(|(_,n)|*n).unwrap_or("?"),
-                    protocol::ButtonFunc::name(self.buttons.slots[idx].0)));
+                .on_hover_text(format!("{btn_name} — {func_name}"));
             let hovered = resp.hovered();
             let sel = self.selected_button == Some(idx);
-            // Always show a subtle dot indicator so users know it's clickable.
-            let dot_pos = r.center();
-            let dot_color = if sel || hovered {
-                ACCENT
-            } else {
-                egui::Color32::from_rgba_unmultiplied(0, 212, 255, 90)
-            };
-            ui.painter().circle_filled(dot_pos, if hovered || sel { 6.0 } else { 4.0 }, dot_color);
-            // Button number inside dot
-            if let Some((pos, _)) = F5V2_BUTTONS.iter().enumerate().find(|(_, (i, _))| *i == idx) {
-                ui.painter().text(dot_pos, egui::Align2::CENTER_CENTER,
-                    format!("{}", pos + 1), egui::FontId::proportional(9.0),
-                    egui::Color32::from_rgb(0x0e, 0x0e, 0x13));
-            }
+
+            // Flat highlight: 2px white outline, no glow, no rounding.
             if hovered || sel {
-                // Glow effect: soft fill + bright ring
-                let glow = if sel {
-                    egui::Color32::from_rgba_unmultiplied(0, 212, 255, 45)
-                } else {
-                    egui::Color32::from_rgba_unmultiplied(0, 212, 255, 22)
-                };
-                ui.painter().rect_filled(r, 12.0, glow);
-                ui.painter().rect_stroke(r, 12.0,
-                    egui::Stroke::new(if sel { 2.5f32 } else { 1.5f32 },
-                        if sel { ACCENT } else { egui::Color32::from_rgba_unmultiplied(0, 212, 255, 150) }));
+                p.rect_stroke(r, 0.0, egui::Stroke::new(2.0, WHITE));
             }
+
+            // Callout: number + name with hairline leader.
+            // Stagger right-side labels vertically to avoid overlap.
+            let on_left = CALLOUT_SIDE.iter().find(|(i,_)| *i==idx).map(|(_,s)| *s).unwrap_or(true);
+            let cy = r.center().y;
+            // Manual y-offset per button for clean staggering (in pixels).
+            let y_off: f32 = match idx {
+                0 => -30.0,  // left click: a bit above center
+                1 => -50.0,  // right click: upper
+                2 => -95.0,  // wheel: topmost on right
+                3 => 0.0,    // back
+                4 => 0.0,    // forward
+                8 => 45.0,   // dpi: below wheel label
+                _ => 0.0,
+            };
+            let ly = cy + y_off;
+            let num_txt = format!("{:02}", n + 1);
+            let name = CALLOUT_NAMES.iter().find(|(i,_)| *i==idx).map(|(_,s)| *s).unwrap_or("?");
+            let label_x = if on_left { rect.min.x + 6.0 } else { rect.max.x - 72.0 };
+            let anchor_x = if on_left { r.min.x } else { r.max.x };
+            // Leader hairline: horizontal from label to hotspot, then vertical jog if offset.
+            let line_start_x = if on_left { label_x + 64.0 } else { label_x };
+            if y_off.abs() > 1.0 {
+                // Elbow: horizontal from label, vertical to hotspot y, horizontal to hotspot.
+                let mid_x = if on_left { line_start_x + 14.0 } else { line_start_x - 14.0 };
+                p.line_segment([egui::pos2(line_start_x, ly), egui::pos2(mid_x, ly)],
+                    egui::Stroke::new(1.0, WHITE));
+                p.line_segment([egui::pos2(mid_x, ly), egui::pos2(mid_x, cy)],
+                    egui::Stroke::new(1.0, WHITE));
+                p.line_segment([egui::pos2(mid_x, cy), egui::pos2(anchor_x, cy)],
+                    egui::Stroke::new(1.0, WHITE));
+            } else {
+                p.line_segment([egui::pos2(line_start_x, cy), egui::pos2(anchor_x, cy)],
+                    egui::Stroke::new(1.0, WHITE));
+            }
+            // Number (mono bold) and name below, left-aligned in margin.
+            p.text(egui::pos2(label_x, ly - 20.0), egui::Align2::LEFT_TOP,
+                num_txt, Self::mono_bold_font(11.0), WHITE);
+            p.text(egui::pos2(label_x, ly - 6.0), egui::Align2::LEFT_TOP,
+                name, Self::mono_font(9.0), WHITE);
+
             if resp.clicked() { clicked = Some(idx); }
         }
         if let Some(i) = clicked {
@@ -494,125 +548,150 @@ impl IgnixApp {
 
 impl IgnixApp {
     fn ui_dpi(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("DPI Stages").size(15.0).strong());
-        ui.label(egui::RichText::new(
-            format!("{} levels · 50 – 30000 · step 50", self.dpi.dpis.len())
-        ).size(11.0).color(DIM));
-        ui.add_space(8.0);
-
-        // ---- stage cards row
-        ui.horizontal_wrapped(|ui| {
-            for i in 0..self.dpi.dpis.len() {
-                let active = self.dpi.active == i;
-                let sel = self.selected_stage == i;
-                let v = self.dpi.dpis[i];
-                let c = self.dpi.colors[i];
-                let frame = Self::card_frame(active);
-                let resp = frame.show(ui, |ui| {
-                    ui.set_min_size(egui::vec2(86.0, 74.0));
-                    ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new(format!("{}", i + 1)).size(11.0).color(DIM));
-                        ui.label(egui::RichText::new(format!("{v}")).size(17.0).strong());
-                        // color dot
-                        let (r, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-                        ui.painter().circle_filled(r.center(), 7.0,
-                            egui::Color32::from_rgb(c[0], c[1], c[2]));
-                    });
-                }).response;
-                let resp = ui.interact(resp.rect, resp.id, egui::Sense::click());
-                if resp.clicked() {
-                    self.selected_stage = i;
-                }
-                if resp.double_clicked() {
-                    self.dpi.active = i;
-                    self.mark_dirty();
-                }
-                let _ = sel;
-            }
-        });
-        ui.add_space(4.0);
-        ui.label(egui::RichText::new("Click to select · double-click to set active").size(11.0).color(FAINT));
-
-        ui.add_space(12.0);
-        // ---- selected stage editor
         if self.dpi.dpis.is_empty() { return; }
         let i = self.selected_stage.min(self.dpi.dpis.len() - 1);
-        Self::card_frame(false).show(ui, |ui| {
-            ui.label(egui::RichText::new(format!("Stage {}", i + 1)).size(13.0).strong());
-            ui.add_space(4.0);
-            let mut v = self.dpi.dpis[i] as i32;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("DPI").size(12.0).color(DIM));
-                if ui.add(egui::Slider::new(&mut v, 50..=30000).show_value(false)).changed() {
-                    self.dpi.dpis[i] = ((v + 25) / 50 * 50).clamp(50, 30000) as u16;
-                    self.mark_dirty();
-                }
-                let mut nv = self.dpi.dpis[i] as i32;
-                if ui.add(egui::DragValue::new(&mut nv).range(50..=30000)).changed() {
-                    self.dpi.dpis[i] = ((nv + 25) / 50 * 50).clamp(50, 30000) as u16;
-                    self.mark_dirty();
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Color").size(12.0).color(DIM));
-                let mut c = self.dpi.colors[i];
-                if ui.color_edit_button_srgb(&mut c).changed() {
-                    self.dpi.colors[i] = c;
-                    self.mark_dirty();
-                }
-                ui.add_space(12.0);
-                if self.dpi.active != i {
-                    if ui.small_button("Set as active").clicked() {
-                        self.dpi.active = i;
-                        self.mark_dirty();
-                    }
-                } else {
-                    ui.label(egui::RichText::new("● Active").size(12.0).color(ACCENT));
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.dpi.dpis.len() > 1 {
-                        if ui.small_button("Remove").clicked() {
-                            self.dpi.dpis.remove(i);
-                            self.dpi.colors.remove(i);
-                            self.dpi.active = self.dpi.active.min(self.dpi.dpis.len() - 1);
-                            self.selected_stage = self.selected_stage.min(self.dpi.dpis.len() - 1);
-                            self.mark_dirty();
-                        }
-                    }
-                });
+        let v = self.dpi.dpis[i];
+
+        // Giant number
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{v}"))
+                .font(Self::display_font(110.0)).color(INK));
+            ui.add_space(16.0);
+            ui.vertical(|ui| {
+                ui.add_space(52.0);
+                ui.label(egui::RichText::new("DPI").font(Self::mono_bold_font(13.0)).color(INK));
+                ui.label(egui::RichText::new(format!("STAGE {} / {}", i + 1, self.dpi.dpis.len()))
+                    .font(Self::mono_font(12.0)).color(ACCENT));
             });
         });
+        ui.add_space(16.0);
 
+        // Ruler-style stage selector
+        let n = self.dpi.dpis.len();
+        let (ruler_rect, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width().min(640.0), 64.0), egui::Sense::hover());
+        {
+            let p = ui.painter().clone();
+            let y0 = ruler_rect.top();
+            let y1 = ruler_rect.top() + 30.0;
+            // Baseline hairline
+            p.hline(ruler_rect.x_range(), y1, egui::Stroke::new(1.0, INK));
+            for s in 0..n {
+                let x = ruler_rect.min.x + (s as f32) * (ruler_rect.width() / (n.max(1) as f32 - 1.0).max(1.0));
+                let is_active = s == self.dpi.active;
+                let is_sel = s == self.selected_stage;
+                // Tick
+                let tick_top = if is_active { y0 } else { y0 + 12.0 };
+                p.vline(x, tick_top..=y1, egui::Stroke::new(if is_active { 3.0 } else { 1.0 },
+                    if is_active { ACCENT } else { INK }));
+                // Stage number above
+                p.text(egui::pos2(x, y0 - 2.0), egui::Align2::CENTER_BOTTOM,
+                    format!("{}", s + 1), Self::mono_font(10.0),
+                    if is_active { ACCENT } else { DIM });
+                // DPI value below
+                p.text(egui::pos2(x, y1 + 4.0), egui::Align2::CENTER_TOP,
+                    format!("{}", self.dpi.dpis[s]), Self::mono_font(10.0),
+                    if is_active { ACCENT } else if is_sel { INK } else { DIM });
+                // Click zone
+                let cr = egui::Rect::from_center_size(
+                    egui::pos2(x, (y0 + y1) / 2.0), egui::vec2(ruler_rect.width() / n as f32, 64.0));
+                let resp = ui.allocate_rect(cr, egui::Sense::click());
+                if resp.clicked() { self.selected_stage = s; }
+                if resp.double_clicked() { self.dpi.active = s; self.mark_dirty(); }
+            }
+        }
         ui.add_space(8.0);
+        ui.label(egui::RichText::new("CLICK SELECTS — DOUBLE-CLICK SETS ACTIVE")
+            .font(Self::mono_font(10.0)).color(FAINT));
+
+        Self::hairline(ui);
+
+        // Stage editor: flat rows
+        Self::section(ui, &format!("STAGE {}", i + 1));
         ui.horizontal(|ui| {
-            if self.dpi.dpis.len() < 6 {
-                if ui.button("+ Add stage").clicked() {
-                    let last = *self.dpi.dpis.last().unwrap_or(&800);
-                    self.dpi.dpis.push((last + 400).min(30000));
-                    self.dpi.colors.push([255, 255, 255]);
-                    self.mark_dirty();
-                }
+            ui.label(egui::RichText::new("DPI").font(Self::mono_font(12.0)).color(DIM));
+            let mut dv = v as i32;
+            if ui.add(egui::DragValue::new(&mut dv).range(50..=30000)
+                .custom_formatter(|n, _| format!("{n:.0}"))
+            ).changed() {
+                self.dpi.dpis[i] = ((dv + 25) / 50 * 50).clamp(50, 30000) as u16;
+                self.mark_dirty();
+            }
+            let mut sv = v as i32;
+            ui.add(egui::Slider::new(&mut sv, 50..=30000).show_value(false));
+            if sv != v as i32 {
+                self.dpi.dpis[i] = ((sv + 25) / 50 * 50).clamp(50, 30000) as u16;
+                self.mark_dirty();
             }
         });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("COLOR").font(Self::mono_font(12.0)).color(DIM));
+            let mut c = self.dpi.colors[i];
+            // Flat square swatch button
+            let (sr, _) = ui.allocate_exact_size(egui::vec2(28.0, 20.0), egui::Sense::click());
+            ui.painter().rect_filled(sr, 0.0, egui::Color32::from_rgb(c[0], c[1], c[2]));
+            ui.painter().rect_stroke(sr, 0.0, egui::Stroke::new(1.0, INK));
+            if ui.interact(sr, ui.next_auto_id(), egui::Sense::click()).clicked() {
+                // open native color picker via invisible button trick: use color_edit_button
+            }
+            if ui.color_edit_button_srgb(&mut c).changed() {
+                self.dpi.colors[i] = c;
+                self.mark_dirty();
+            }
+            ui.add_space(16.0);
+            if self.dpi.active == i {
+                ui.label(egui::RichText::new("ACTIVE").font(Self::mono_bold_font(11.0)).color(ACCENT));
+            } else if ui.button(egui::RichText::new("SET ACTIVE").font(Self::mono_font(11.0))).clicked() {
+                self.dpi.active = i;
+                self.mark_dirty();
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if self.dpi.dpis.len() > 1 {
+                    if ui.button(egui::RichText::new("REMOVE").font(Self::mono_font(11.0))).clicked() {
+                        self.dpi.dpis.remove(i);
+                        self.dpi.colors.remove(i);
+                        self.dpi.active = self.dpi.active.min(self.dpi.dpis.len() - 1);
+                        self.selected_stage = self.selected_stage.min(self.dpi.dpis.len() - 1);
+                        self.mark_dirty();
+                    }
+                }
+                if self.dpi.dpis.len() < 6 {
+                    if ui.button(egui::RichText::new("+ ADD STAGE").font(Self::mono_font(11.0))).clicked() {
+                        let last = *self.dpi.dpis.last().unwrap_or(&800);
+                        self.dpi.dpis.push((last + 400).min(30000));
+                        self.dpi.colors.push([255, 255, 255]);
+                        self.mark_dirty();
+                    }
+                }
+            });
+        });
 
-        ui.add_space(16.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.label(egui::RichText::new("Sensor").size(15.0).strong());
+        Self::hairline(ui);
+        Self::section(ui, "SENSOR");
         let mut snap = self.dpi.angle_snapping != 0;
-        if ui.checkbox(&mut snap, "Angle snapping")
-            .on_hover_text("Straightens lines — useful for drawing, bad for FPS.")
-            .changed() {
-            self.dpi.angle_snapping = if snap { 1 } else { 0 };
-            self.mark_dirty();
-        }
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("ANGLE SNAPPING").font(Self::mono_font(12.0)).color(INK));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let txt = if snap { "ON" } else { "OFF" };
+                if ui.selectable_label(snap, egui::RichText::new(txt).font(Self::mono_bold_font(11.0))).clicked() {
+                    snap = !snap;
+                    self.dpi.angle_snapping = if snap { 1 } else { 0 };
+                    self.mark_dirty();
+                }
+            });
+        });
         let mut rip = self.dpi.ripple != 0;
-        if ui.checkbox(&mut rip, "Ripple control")
-            .on_hover_text("Reduces sensor jitter at high DPI.")
-            .changed() {
-            self.dpi.ripple = if rip { 1 } else { 0 };
-            self.mark_dirty();
-        }
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("RIPPLE CONTROL").font(Self::mono_font(12.0)).color(INK));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let txt = if rip { "ON" } else { "OFF" };
+                if ui.selectable_label(rip, egui::RichText::new(txt).font(Self::mono_bold_font(11.0))).clicked() {
+                    rip = !rip;
+                    self.dpi.ripple = if rip { 1 } else { 0 };
+                    self.mark_dirty();
+                }
+            });
+        });
     }
 }
 
@@ -620,40 +699,44 @@ impl IgnixApp {
 
 impl IgnixApp {
     fn ui_buttons(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Button Mapping").size(15.0).strong());
-        ui.label(egui::RichText::new(
-            "Click a highlighted zone on the mouse, or a row below, then pick a function."
-        ).size(11.0).color(DIM));
+        Self::section(ui, "BUTTON MAPPING");
+        ui.label(egui::RichText::new("CLICK A ZONE ON THE MOUSE, OR A ROW BELOW")
+            .font(Self::mono_font(10.0)).color(FAINT));
         ui.add_space(8.0);
 
-        Self::card_frame(false).show(ui, |ui| {
-            egui::Grid::new("btn_grid").num_columns(3).spacing([12.0, 6.0]).striped(true).show(ui, |ui| {
-                ui.label(egui::RichText::new("Button").size(12.0).strong().color(DIM));
-                ui.label(egui::RichText::new("Function").size(12.0).strong().color(DIM));
-                ui.label(egui::RichText::new("").size(12.0));
-                ui.end_row();
-                for &(idx, name) in F5V2_BUTTONS.iter() {
-                    let sel = self.selected_button == Some(idx);
-                    if ui.selectable_label(sel, name).clicked() {
-                        self.selected_button = Some(idx);
-                        self.show_button_picker = true;
-                    }
-                    let (t, _, c2) = self.buttons.slots[idx];
-                    let desc = match t {
-                        protocol::ButtonFunc::KEYBOARD => format!("Key (HID {c2})"),
-                        protocol::ButtonFunc::MACRO => format!("Macro {c2}"),
-                        _ => protocol::ButtonFunc::name(t).to_string(),
-                    };
-                    ui.label(egui::RichText::new(desc).size(13.0)
-                        .color(if sel { ACCENT } else { TEXT }));
-                    if ui.small_button("Edit").clicked() {
-                        self.selected_button = Some(idx);
-                        self.show_button_picker = true;
-                    }
-                    ui.end_row();
-                }
-            });
-        });
+        for (n, &(idx, name)) in F5V2_BUTTONS.iter().enumerate() {
+            let (t, _, c2) = self.buttons.slots[idx];
+            let desc = match t {
+                protocol::ButtonFunc::KEYBOARD => format!("KEY HID {c2}"),
+                protocol::ButtonFunc::MACRO => format!("MACRO {c2}"),
+                _ => protocol::ButtonFunc::name(t).to_uppercase(),
+            };
+            let sel = self.selected_button == Some(idx);
+            // Hairline top
+            let r = ui.available_rect_before_wrap();
+            ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
+            let row_resp = ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("{:02}", n + 1))
+                    .font(Self::mono_bold_font(12.0)).color(if sel { ACCENT } else { DIM }));
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(name.to_uppercase())
+                    .font(Self::mono_font(12.0)).color(INK));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new("EDIT →").font(Self::mono_font(11.0)).color(DIM));
+                    ui.add_space(12.0);
+                    ui.label(egui::RichText::new(desc)
+                        .font(Self::mono_bold_font(12.0)).color(if sel { ACCENT } else { INK }));
+                });
+            }).response;
+            let click = ui.interact(row_resp.rect, ui.next_auto_id(), egui::Sense::click());
+            if click.clicked() {
+                self.selected_button = Some(idx);
+                self.show_button_picker = true;
+            }
+        }
+        // Bottom hairline
+        let r = ui.available_rect_before_wrap();
+        ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
     }
 
     fn ui_button_picker(&mut self, ctx: &egui::Context) {
@@ -661,33 +744,39 @@ impl IgnixApp {
         let name = F5V2_BUTTONS.iter().find(|(i,_)| *i==idx).map(|(_,n)|*n).unwrap_or("?");
         let (cur_t, _, cur_c2) = self.buttons.slots[idx];
 
-        egui::Window::new(format!("Remap — {name}"))
+        egui::Window::new(format!("REMAP — {}", name.to_uppercase()))
             .collapsible(false).resizable(false)
+            .frame(egui::Frame::none().fill(PAPER)
+                .stroke(egui::Stroke::new(2.0, INK))
+                .inner_margin(egui::Margin::same(20.0)))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
-                ui.set_min_width(320.0);
+                ui.set_min_width(340.0);
                 let groups: &[(&str, &[u8], &[&str])] = &[
-                    ("Mouse", &[2,3,4,5,6,7,9,10,11,12],
+                    ("MOUSE", &[2,3,4,5,6,7,9,10,11,12],
                      &["Left click","Right click","Middle click","Back","Forward","Double click",
                        "Wheel up","Wheel down","Wheel left","Wheel right"]),
                     ("DPI", &[13,14,15,16], &["DPI cycle","DPI +","DPI −","Sniper (hold)"]),
-                    ("Media", &[24,22,23,26,27,28,21,29,30],
+                    ("MEDIA", &[24,22,23,26,27,28,21,29,30],
                      &["Play/pause","Prev track","Next track","Mute","Volume +","Volume −",
                        "Media player","Calculator","Email"]),
                 ];
                 for (gname, types, hints) in groups {
-                    ui.label(egui::RichText::new(*gname).size(11.0).strong().color(DIM));
+                    ui.label(egui::RichText::new(*gname)
+                        .font(Self::mono_bold_font(11.0)).color(DIM));
                     for (t, hint) in types.iter().zip(hints.iter()) {
-                        if ui.radio(cur_t == *t, protocol::ButtonFunc::name(*t))
-                            .on_hover_text(*hint).clicked() {
+                        let lbl = egui::RichText::new(protocol::ButtonFunc::name(*t).to_uppercase())
+                            .font(Self::mono_font(12.0));
+                        if ui.radio(cur_t == *t, lbl).on_hover_text(*hint).clicked() {
                             self.buttons.slots[idx] = (*t, 0, 0);
                             self.mark_dirty();
                         }
                     }
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
                 }
-                ui.separator();
-                if ui.radio(cur_t == protocol::ButtonFunc::KEYBOARD, "Keyboard key")
+                Self::hairline(ui);
+                if ui.radio(cur_t == protocol::ButtonFunc::KEYBOARD,
+                    egui::RichText::new("KEYBOARD KEY").font(Self::mono_font(12.0)))
                     .on_hover_text("Send a keyboard key press.").clicked() {
                     self.buttons.slots[idx] = (protocol::ButtonFunc::KEYBOARD, 0, 4);
                     self.mark_dirty();
@@ -695,16 +784,17 @@ impl IgnixApp {
                 if cur_t == protocol::ButtonFunc::KEYBOARD {
                     let mut hid = cur_c2.max(4) as i32;
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("HID code").size(12.0).color(DIM));
+                        ui.label(egui::RichText::new("HID CODE").font(Self::mono_font(11.0)).color(DIM));
                         if ui.add(egui::DragValue::new(&mut hid).range(4..=231)).changed() {
                             self.buttons.slots[idx].2 = hid as u8;
                             self.mark_dirty();
                         }
                     });
-                    ui.label(egui::RichText::new("4=A … 29=Z · 30=1 … 39=0 · 40=Enter · 41=Esc · 44=Space")
-                        .size(11.0).color(FAINT));
+                    ui.label(egui::RichText::new("4=A · 29=Z · 30=1 · 39=0 · 40=ENTER · 41=ESC · 44=SPACE")
+                        .font(Self::mono_font(10.0)).color(FAINT));
                 }
-                if ui.radio(cur_t == protocol::ButtonFunc::MACRO, "Macro")
+                if ui.radio(cur_t == protocol::ButtonFunc::MACRO,
+                    egui::RichText::new("MACRO").font(Self::mono_font(12.0)))
                     .on_hover_text("Trigger a macro (see Macros tab).").clicked() {
                     self.buttons.slots[idx] = (protocol::ButtonFunc::MACRO, 0, 1);
                     self.mark_dirty();
@@ -712,23 +802,25 @@ impl IgnixApp {
                 if cur_t == protocol::ButtonFunc::MACRO {
                     let mut mid = cur_c2.clamp(1, 32) as i32;
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Macro slot").size(12.0).color(DIM));
+                        ui.label(egui::RichText::new("MACRO SLOT").font(Self::mono_font(11.0)).color(DIM));
                         if ui.add(egui::DragValue::new(&mut mid).range(1..=32)).changed() {
                             self.buttons.slots[idx].2 = mid as u8;
                             self.mark_dirty();
                         }
                     });
                 }
-                if ui.radio(cur_t == protocol::ButtonFunc::DISABLED, "Disabled").clicked() {
+                if ui.radio(cur_t == protocol::ButtonFunc::DISABLED,
+                    egui::RichText::new("DISABLED").font(Self::mono_font(12.0))).clicked() {
                     self.buttons.slots[idx] = (protocol::ButtonFunc::DISABLED, 0, 0);
                     self.mark_dirty();
                 }
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button(egui::RichText::new("Done").strong()).clicked() {
-                        self.show_button_picker = false;
-                    }
-                });
+                ui.add_space(12.0);
+                let btn = egui::Button::new(
+                    egui::RichText::new("DONE").font(Self::mono_bold_font(12.0)).color(WHITE)
+                ).fill(INK).min_size(egui::vec2(120.0, 36.0));
+                if ui.add(btn).clicked() {
+                    self.show_button_picker = false;
+                }
             });
     }
 }
@@ -737,81 +829,74 @@ impl IgnixApp {
 
 impl IgnixApp {
     fn ui_lighting(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Lighting").size(15.0).strong());
-        ui.add_space(8.0);
+        Self::section(ui, "LIGHTING");
+        let mut mode = self.light.mode;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("MODE").font(Self::mono_font(12.0)).color(DIM));
+            egui::ComboBox::from_id_source("lightmode")
+                .selected_text(LightMode::all().iter()
+                    .find(|(_,m)| *m==mode).map(|(n,_)| n.to_uppercase()).unwrap_or("?".into()))
+                .show_ui(ui, |ui| {
+                    for (n, m) in LightMode::all() {
+                        ui.selectable_value(&mut mode, *m, n.to_uppercase());
+                    }
+                });
+        });
+        if mode != self.light.mode { self.light.mode = mode; self.mark_dirty(); }
+        ui.add_space(4.0);
 
-        Self::card_frame(false).show(ui, |ui| {
-            let mut mode = self.light.mode;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Mode").size(12.0).color(DIM));
-                egui::ComboBox::from_id_source("lightmode")
-                    .selected_text(LightMode::all().iter()
-                        .find(|(_,m)| *m==mode).map(|(n,_)|*n).unwrap_or("?"))
-                    .show_ui(ui, |ui| {
-                        for (n, m) in LightMode::all() {
-                            ui.selectable_value(&mut mode, *m, *n);
-                        }
-                    });
-            });
-            if mode != self.light.mode { self.light.mode = mode; self.mark_dirty(); }
-            ui.add_space(4.0);
-
-            // color
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Color").size(12.0).color(DIM));
-                if self.light.mode.uses_color() {
-                    let mut c = self.light.color;
-                    if ui.color_edit_button_srgb(&mut c).changed() {
-                        self.light.color = c; self.mark_dirty();
-                    }
-                } else {
-                    ui.label(egui::RichText::new("n/a for this mode").size(12.0).color(FAINT));
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("COLOR").font(Self::mono_font(12.0)).color(DIM));
+            if self.light.mode.uses_color() {
+                let mut c = self.light.color;
+                let (sr, _) = ui.allocate_exact_size(egui::vec2(36.0, 22.0), egui::Sense::hover());
+                ui.painter().rect_filled(sr, 0.0, egui::Color32::from_rgb(c[0], c[1], c[2]));
+                ui.painter().rect_stroke(sr, 0.0, egui::Stroke::new(1.0, INK));
+                if ui.color_edit_button_srgb(&mut c).changed() {
+                    self.light.color = c; self.mark_dirty();
                 }
-            });
-            // brightness
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Brightness").size(12.0).color(DIM));
-                if self.light.mode.uses_brightness() {
-                    let mut b = self.light.brightness as i32;
-                    if ui.add(egui::Slider::new(&mut b, 0..=15).show_value(true)).changed() {
-                        self.light.brightness = b as u8; self.mark_dirty();
-                    }
-                } else {
-                    ui.label(egui::RichText::new("n/a").size(12.0).color(FAINT));
+            } else {
+                ui.label(egui::RichText::new("N/A FOR THIS MODE").font(Self::mono_font(11.0)).color(FAINT));
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("BRIGHTNESS").font(Self::mono_font(12.0)).color(DIM));
+            if self.light.mode.uses_brightness() {
+                let mut b = self.light.brightness as i32;
+                if ui.add(egui::Slider::new(&mut b, 0..=15).show_value(true)).changed() {
+                    self.light.brightness = b as u8; self.mark_dirty();
                 }
-            });
-            // speed
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Speed").size(12.0).color(DIM));
-                if self.light.mode.uses_speed() {
-                    let mut s = self.light.speed as i32;
-                    if ui.add(egui::Slider::new(&mut s, 0..=15).show_value(true)).changed() {
-                        self.light.speed = s as u8; self.mark_dirty();
-                    }
-                } else {
-                    ui.label(egui::RichText::new("n/a").size(12.0).color(FAINT));
+            } else {
+                ui.label(egui::RichText::new("N/A").font(Self::mono_font(11.0)).color(FAINT));
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("SPEED").font(Self::mono_font(12.0)).color(DIM));
+            if self.light.mode.uses_speed() {
+                let mut s = self.light.speed as i32;
+                if ui.add(egui::Slider::new(&mut s, 0..=15).show_value(true)).changed() {
+                    self.light.speed = s as u8; self.mark_dirty();
                 }
-            });
+            } else {
+                ui.label(egui::RichText::new("N/A").font(Self::mono_font(11.0)).color(FAINT));
+            }
         });
 
-        ui.add_space(12.0);
-        ui.label(egui::RichText::new("Power").size(15.0).strong());
-        ui.add_space(4.0);
-        Self::card_frame(false).show(ui, |ui| {
-            let mut s1 = self.light.sleep1_min as i32;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Dim after").size(12.0).color(DIM));
-                if ui.add(egui::Slider::new(&mut s1, 0..=60).text("min")).changed() {
-                    self.light.sleep1_min = s1 as u8; self.mark_dirty();
-                }
-            });
-            let mut s2 = self.light.sleep2_min as i32;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Sleep after").size(12.0).color(DIM));
-                if ui.add(egui::Slider::new(&mut s2, 0..=60).text("min")).changed() {
-                    self.light.sleep2_min = s2 as u8; self.mark_dirty();
-                }
-            });
+        Self::hairline(ui);
+        Self::section(ui, "POWER");
+        let mut s1 = self.light.sleep1_min as i32;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("DIM AFTER").font(Self::mono_font(12.0)).color(DIM));
+            if ui.add(egui::Slider::new(&mut s1, 0..=60).text("MIN")).changed() {
+                self.light.sleep1_min = s1 as u8; self.mark_dirty();
+            }
+        });
+        let mut s2 = self.light.sleep2_min as i32;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("SLEEP AFTER").font(Self::mono_font(12.0)).color(DIM));
+            if ui.add(egui::Slider::new(&mut s2, 0..=60).text("MIN")).changed() {
+                self.light.sleep2_min = s2 as u8; self.mark_dirty();
+            }
         });
     }
 }
@@ -820,34 +905,45 @@ impl IgnixApp {
 
 impl IgnixApp {
     fn ui_performance(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Polling Rate").size(15.0).strong());
-        ui.label(egui::RichText::new("Higher = lower latency, more CPU.").size(11.0).color(DIM));
+        Self::section(ui, "POLLING RATE");
+        ui.label(egui::RichText::new("HIGHER = LOWER LATENCY, MORE CPU")
+            .font(Self::mono_font(10.0)).color(FAINT));
         ui.add_space(8.0);
-        Self::card_frame(false).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for hz in [125u32, 250, 500, 1000] {
-                    if ui.radio(self.rate == hz, format!("{hz} Hz")).clicked() {
-                        self.rate = hz; self.mark_dirty();
-                    }
-                }
-            });
-        });
 
-        ui.add_space(16.0);
-        ui.label(egui::RichText::new("Click Response").size(15.0).strong());
-        ui.add_space(4.0);
-        Self::card_frame(false).show(ui, |ui| {
-            let mut db = self.light.debounce_ms as i32;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Debounce").size(12.0).color(DIM));
-                let resp = ui.add(egui::Slider::new(&mut db, 2..=20).text("ms"))
-                    .on_hover_text("Lower = faster clicks, higher double-click risk.");
-                if resp.changed() {
-                    self.light.debounce_ms = db as u8; self.mark_dirty();
+        // Segmented control: flat boxes, selected = black fill
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+            for hz in [125u32, 250, 500, 1000] {
+                let sel = self.rate == hz;
+                let txt = egui::RichText::new(format!("{hz}"))
+                    .font(Self::mono_bold_font(13.0))
+                    .color(if sel { WHITE } else { INK });
+                let mut btn = egui::Button::new(txt).min_size(egui::vec2(72.0, 40.0));
+                btn = btn.fill(if sel { INK } else { PAPER });
+                // Hairline border via stroke override: draw manually after
+                let resp = ui.add(btn);
+                let r = resp.rect;
+                ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, INK));
+                if resp.clicked() {
+                    self.rate = hz; self.mark_dirty();
                 }
-            });
-            ui.label(egui::RichText::new("Default 8 ms.").size(11.0).color(FAINT));
+            }
         });
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("HZ").font(Self::mono_font(10.0)).color(FAINT));
+
+        Self::hairline(ui);
+        Self::section(ui, "CLICK RESPONSE");
+        let mut db = self.light.debounce_ms as i32;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("DEBOUNCE").font(Self::mono_font(12.0)).color(DIM));
+            let resp = ui.add(egui::Slider::new(&mut db, 2..=20).text("MS"))
+                .on_hover_text("Lower = faster clicks, higher double-click risk.");
+            if resp.changed() {
+                self.light.debounce_ms = db as u8; self.mark_dirty();
+            }
+        });
+        ui.label(egui::RichText::new("DEFAULT 8 MS").font(Self::mono_font(10.0)).color(FAINT));
     }
 }
 
@@ -873,104 +969,112 @@ impl IgnixApp {
     }
 
     fn ui_macros(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Macros").size(15.0).strong());
-        ui.label(egui::RichText::new(
-            "32 slots. Click a button on the mouse image, pick Macro, then choose a slot."
-        ).size(11.0).color(DIM));
+        Self::section(ui, "MACROS");
+        ui.label(egui::RichText::new("32 SLOTS — ASSIGN VIA BUTTONS TAB")
+            .font(Self::mono_font(10.0)).color(FAINT));
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
-            // ---- slot list
-            egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
-                ui.vertical(|ui| {
-                    for i in 0..32 {
-                        let m = &self.macros[i];
-                        let label = if m.events.is_empty() {
-                            format!("{:2}. {}", i + 1, m.name)
-                        } else {
-                            format!("{:2}. {} ({} events)", i + 1, m.name, m.events.len())
-                        };
-                        let sel = self.selected_macro == i;
-                        if ui.selectable_label(sel, egui::RichText::new(label).size(12.0)).clicked() {
-                            self.selected_macro = i;
-                        }
-                    }
-                });
+            // ---- slot list (flat rows)
+            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                ui.set_min_width(200.0);
+                for i in 0..32 {
+                    let m = &self.macros[i];
+                    let sel = self.selected_macro == i;
+                    let r = ui.available_rect_before_wrap();
+                    ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
+                    let label = if m.events.is_empty() {
+                        format!("{:02}  {}", i + 1, m.name.to_uppercase())
+                    } else {
+                        format!("{:02}  {} [{}]", i + 1, m.name.to_uppercase(), m.events.len())
+                    };
+                    let resp = ui.selectable_label(sel,
+                        egui::RichText::new(label).font(Self::mono_font(11.0))
+                            .color(if sel { ACCENT } else { INK }));
+                    if resp.clicked() { self.selected_macro = i; }
+                }
+                let r = ui.available_rect_before_wrap();
+                ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
             });
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(12.0);
+            ui.add_space(20.0);
 
             // ---- editor
             let idx = self.selected_macro;
-            // Copy temp state to avoid borrow conflicts.
             let mut new_delay = self.macro_new_delay.clone();
             let mut new_key = self.macro_new_key.clone();
             let connected = self.connected;
             let applying = self.applying;
             ui.vertical(|ui| {
-                ui.set_min_width(380.0);
+                ui.set_min_width(400.0);
                 let m = &mut self.macros[idx];
 
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("Slot {}", idx + 1)).size(14.0).strong());
-                    ui.add_space(8.0);
-                    // Auto-clicker preset
-                    if ui.small_button("Auto-clicker preset").clicked() {
-                        *m = protocol::autoclicker_preset(100);
-                        m.name = format!("Auto Clicker {}", idx + 1);
-                    }
+                    ui.label(egui::RichText::new(format!("SLOT {:02}", idx + 1))
+                        .font(Self::display_font(22.0)).color(INK));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button(egui::RichText::new("AUTO-CLICKER PRESET")
+                            .font(Self::mono_font(10.0))).clicked() {
+                            *m = protocol::autoclicker_preset(100);
+                            m.name = format!("Auto Clicker {}", idx + 1);
+                        }
+                    });
                 });
                 ui.add_space(4.0);
 
                 ui.horizontal(|ui| {
-                    ui.label("Name:");
+                    ui.label(egui::RichText::new("NAME").font(Self::mono_font(11.0)).color(DIM));
                     ui.text_edit_singleline(&mut m.name);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Loop:");
-                    let types = ["Once", "Loop while held", "Toggle"];
-                    for (ti, tn) in types.iter().enumerate() {
-                        if ui.selectable_label(m.loop_type as usize == ti, *tn).clicked() {
+                    ui.label(egui::RichText::new("LOOP").font(Self::mono_font(11.0)).color(DIM));
+                    for (ti, tn) in ["ONCE", "WHILE HELD", "TOGGLE"].iter().enumerate() {
+                        if ui.selectable_label(m.loop_type as usize == ti,
+                            egui::RichText::new(*tn).font(Self::mono_font(11.0))).clicked() {
                             m.loop_type = ti as u8;
                         }
                     }
                 });
                 ui.add_space(8.0);
 
-                ui.label(egui::RichText::new("Events").size(13.0).strong());
+                ui.label(egui::RichText::new("EVENTS").font(Self::mono_bold_font(11.0)).color(DIM));
                 let mut del: Option<usize> = None;
-                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
-                    // borrow dance: collect display strings first
+                egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
                     let rows: Vec<String> = m.events.iter().map(|e| {
                         let what = if e.keycode >= 241 && e.keycode <= 245 {
                             protocol::MACRO_MOUSE_CODES.iter()
                                 .find(|(c, _)| *c == e.keycode)
-                                .map(|(_, n)| *n).unwrap_or("Mouse")
+                                .map(|(_, n)| n.to_uppercase()).unwrap_or("MOUSE".into())
                         } else {
-                            "Key"
+                            "KEY".to_string()
                         };
-                        let dir = if e.is_up { "up  " } else { "down" };
-                        format!("{}ms  {} {} (0x{:02X})", e.delay_ms, what, dir, e.keycode)
+                        let dir = if e.is_up { "UP  " } else { "DOWN" };
+                        format!("{:>5}MS  {} {} 0x{:02X}", e.delay_ms, what, dir, e.keycode)
                     }).collect();
                     for (ei, row) in rows.iter().enumerate() {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(row).size(12.0).monospace());
-                            if ui.small_button("x").clicked() { del = Some(ei); }
+                            ui.label(egui::RichText::new(format!("{:02}", ei + 1))
+                                .font(Self::mono_font(10.0)).color(FAINT));
+                            ui.label(egui::RichText::new(row).font(egui::FontId::monospace(11.0)).color(INK));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.button(egui::RichText::new("×").font(Self::mono_font(12.0))).clicked() {
+                                    del = Some(ei);
+                                }
+                            });
                         });
                     }
                     if m.events.is_empty() {
-                        ui.label(egui::RichText::new("No events yet.").size(11.0).color(DIM));
+                        ui.label(egui::RichText::new("NO EVENTS YET")
+                            .font(Self::mono_font(10.0)).color(FAINT));
                     }
                 });
                 if let Some(ei) = del { m.events.remove(ei); }
 
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("Add event").size(12.0).strong());
-                // Mouse click buttons
+                ui.label(egui::RichText::new("ADD EVENT").font(Self::mono_bold_font(11.0)).color(DIM));
                 ui.horizontal_wrapped(|ui| {
                     for (code, name) in protocol::MACRO_MOUSE_CODES {
-                        if ui.small_button(format!("+ {}", name)).clicked() {
+                        if ui.button(egui::RichText::new(format!("+ {}", name.to_uppercase()))
+                            .font(Self::mono_font(10.0))).clicked() {
                             let d: u16 = new_delay.parse().unwrap_or(100);
                             m.events.push(protocol::MacroEvent { delay_ms: 10, keycode: code, is_up: false });
                             m.events.push(protocol::MacroEvent { delay_ms: d, keycode: code, is_up: true });
@@ -978,18 +1082,17 @@ impl IgnixApp {
                     }
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Delay ms:");
+                    ui.label(egui::RichText::new("DELAY MS").font(Self::mono_font(10.0)).color(DIM));
                     ui.text_edit_singleline(&mut new_delay);
-                    let d: u16 = new_delay.parse().unwrap_or(100).clamp(10, 12700);
-                    if ui.small_button("+ Delay").clicked() {
-                        // delay-only: use keycode 0 as no-op press with delay
+                    if ui.button(egui::RichText::new("+ DELAY").font(Self::mono_font(10.0))).clicked() {
+                        let d: u16 = new_delay.parse().unwrap_or(100).clamp(10, 12700);
                         m.events.push(protocol::MacroEvent { delay_ms: d, keycode: 0, is_up: false });
                     }
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Keycode hex:");
+                    ui.label(egui::RichText::new("KEY HEX").font(Self::mono_font(10.0)).color(DIM));
                     ui.text_edit_singleline(&mut new_key);
-                    if ui.small_button("+ Key down/up").clicked() {
+                    if ui.button(egui::RichText::new("+ KEY").font(Self::mono_font(10.0))).clicked() {
                         let kc = u8::from_str_radix(new_key.trim_start_matches("0x"), 16).unwrap_or(0);
                         if kc != 0 {
                             let d: u16 = new_delay.parse().unwrap_or(100);
@@ -1002,16 +1105,18 @@ impl IgnixApp {
                 ui.add_space(12.0);
                 let can_upload = connected && !applying && !m.events.is_empty();
                 let event_count = m.events.len();
-                // End the mutable borrow before calling &mut self method.
                 let _ = m;
-                if ui.add_enabled(can_upload, egui::Button::new("Upload to Mouse")).clicked() {
+                let btn = egui::Button::new(
+                    egui::RichText::new("UPLOAD TO MOUSE").font(Self::mono_bold_font(12.0)).color(WHITE)
+                ).fill(INK).min_size(egui::vec2(180.0, 38.0));
+                if ui.add_enabled(can_upload, btn).clicked() {
                     self.spawn_upload_macro(idx);
                 }
                 if event_count > 50 {
-                    ui.label(egui::RichText::new("Warning: >50 events, will be truncated.").color(WARN).size(11.0));
+                    ui.label(egui::RichText::new("WARNING: >50 EVENTS, WILL BE TRUNCATED")
+                        .font(Self::mono_font(10.0)).color(INK));
                 }
             });
-            // Write back temp state.
             self.macro_new_delay = new_delay;
             self.macro_new_key = new_key;
         });
