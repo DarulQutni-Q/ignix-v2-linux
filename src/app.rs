@@ -16,7 +16,7 @@ pub const INK: egui::Color32 = egui::Color32::from_rgb(0x11, 0x11, 0x11);   // n
 pub const WHITE: egui::Color32 = egui::Color32::WHITE;
 pub const DIM: egui::Color32 = egui::Color32::from_rgb(0x6E, 0x6A, 0x63);   // warm gray
 pub const HAIRLINE: egui::Color32 = egui::Color32::from_rgb(0xD8, 0xD4, 0xC8);
-pub const FAINT: egui::Color32 = egui::Color32::from_rgb(0xA8, 0xA4, 0x9A);
+pub const FAINT: egui::Color32 = egui::Color32::from_rgb(0x8A, 0x86, 0x7C);
 
 // Mouse photo hotspot fractions (x, y, w, h) over the image rect.
 // Tuned against mouse-white-hd.png (1250x2337, transparent bg).
@@ -199,14 +199,15 @@ impl IgnixApp {
         self.connecting = true;
         thread::spawn(move || {
             let res = (|| -> Result<JobResult, String> {
-                let m = Mouse::open()?;
+                let mut m = Mouse::open()?;
+                let profile_id = m.read_profile_id().unwrap_or(1);
+                m.set_profile(profile_id);
                 let dpi_raw = m.read_dpi_raw()?;
                 let dpi = protocol::parse_dpi(&dpi_raw).map_err(|e| e.to_string())?;
                 let rate = m.read_rate()?;
                 let light = m.read_light()?;
                 let buttons = m.read_buttons().unwrap_or_default();
                 let firmware = m.read_firmware().unwrap_or_else(|_| "?".into());
-                let profile_id = m.read_profile_id().unwrap_or(1);
                 Ok(JobResult::Connected { dpi, dpi_raw, rate, light, buttons, firmware, profile_id })
             })();
             let _ = tx.send(res.unwrap_or_else(JobResult::Error));
@@ -217,11 +218,12 @@ impl IgnixApp {
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
         self.applying = true;
-        let (dpi, dpi_raw, rate, light, buttons) =
-            (self.dpi.clone(), self.dpi_raw.clone(), self.rate, self.light.clone(), self.buttons.clone());
+        let (dpi, dpi_raw, rate, light, buttons, profile_id) =
+            (self.dpi.clone(), self.dpi_raw.clone(), self.rate, self.light.clone(), self.buttons.clone(), self.profile_id);
         thread::spawn(move || {
             let res: Result<String, String> = (|| {
-                let m = Mouse::open()?;
+                let mut m = Mouse::open()?;
+                m.set_profile(profile_id);
                 let base = if dpi_raw.is_empty() { None } else { Some(dpi_raw.as_slice()) };
                 m.write_dpi(&dpi, base)?;
                 m.write_rate(rate)?;
@@ -275,7 +277,7 @@ impl eframe::App for IgnixApp {
         // ---- left: blue panel, title, mouse photo, footer label
         egui::SidePanel::left("mouse")
             .resizable(false)
-            .exact_width(380.0)
+            .exact_width(340.0)
             .frame(egui::Frame::none().fill(ACCENT))
             .show(ctx, |ui| {
                 // Override text colors for blue bg via local visuals
@@ -552,13 +554,15 @@ impl IgnixApp {
         let i = self.selected_stage.min(self.dpi.dpis.len() - 1);
         let v = self.dpi.dpis[i];
 
-        // Giant number
+        // Giant number: scale font to fit available width.
+        let avail_w = ui.available_width();
+        let num_size = (avail_w / 5.5).clamp(48.0, 110.0);
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("{v}"))
-                .font(Self::display_font(110.0)).color(INK));
+                .font(Self::display_font(num_size)).color(INK));
             ui.add_space(16.0);
             ui.vertical(|ui| {
-                ui.add_space(52.0);
+                ui.add_space(num_size * 0.45);
                 ui.label(egui::RichText::new("DPI").font(Self::mono_bold_font(13.0)).color(INK));
                 ui.label(egui::RichText::new(format!("STAGE {} / {}", i + 1, self.dpi.dpis.len()))
                     .font(Self::mono_font(12.0)).color(ACCENT));
@@ -611,7 +615,8 @@ impl IgnixApp {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("DPI").font(Self::mono_font(12.0)).color(DIM));
             let mut dv = v as i32;
-            if ui.add(egui::DragValue::new(&mut dv).range(50..=30000)
+            if ui.add_sized(egui::vec2(90.0, 24.0),
+                egui::DragValue::new(&mut dv).range(50..=30000)
                 .custom_formatter(|n, _| format!("{n:.0}"))
             ).changed() {
                 self.dpi.dpis[i] = ((dv + 25) / 50 * 50).clamp(50, 30000) as u16;
