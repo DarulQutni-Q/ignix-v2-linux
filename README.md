@@ -5,6 +5,14 @@ Native Linux config tool for the **Vortex Ignix V2** gaming mouse
 
 Reverse-engineered from the official BK-MouseHub Electron app's WebHID protocol.
 
+## Install (one line)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DarulQutni-Q/ignix-v2-linux/main/install.sh | bash
+```
+
+Downloads the latest prebuilt binary to `~/.local/bin`, installs the udev rule, and adds a desktop entry.
+
 ## Features
 
 - **DPI**: 1–6 levels (50–30000, step 50), per-level RGB, active level, angle snapping, ripple control
