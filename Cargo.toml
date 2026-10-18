@@ -1,0 +1,16 @@
+[package]
+name = "ignix-gui"
+version = "0.1.0"
+edition = "2021"
+description = "Linux config tool for Vortex Ignix V2 gaming mouse"
+
+[dependencies]
+eframe = { version = "0.28", features = ["default_fonts"] }
+egui = "0.28"
+hidapi = "2.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

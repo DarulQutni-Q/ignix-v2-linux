@@ -1,0 +1,6 @@
+# Vortex Ignix V2 (Xenta IGNIX F5V2) - allow non-root HID access
+# Install: sudo cp 99-ignix-v2.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger
+# Then unplug/replug the mouse.
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1d57", ATTRS{idProduct}=="22ae", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d57", ATTRS{idProduct}=="22ae", MODE="0666", TAG+="uaccess"

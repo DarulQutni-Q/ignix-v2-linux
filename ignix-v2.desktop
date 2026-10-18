@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Ignix V2 Configurator
+Comment=Configure Vortex Ignix V2 gaming mouse
+Exec=ignix-gui
+Icon=ignix-v2
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;
+Keywords=mouse;dpi;gaming;vortex;ignix;
+StartupWMClass=ignix-v2
