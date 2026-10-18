@@ -8,7 +8,8 @@ use std::time::Duration;
 // ---------------------------------------------------------------- constants
 
 pub const VID: u16 = 0x1D57;
-pub const PID: u16 = 0x22AE;
+pub const PID: u16 = 0x22AE;        // wired (USB cable)
+pub const PID_DONGLE: u16 = 0xFA60; // 2.4G wireless dongle
 pub const PROFILE: u8 = 1;
 
 /// (send_len, read_len) per report ID.

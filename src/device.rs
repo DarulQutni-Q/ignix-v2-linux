@@ -13,13 +13,14 @@ pub struct Mouse {
 
 impl Mouse {
     /// Open the mouse's config interface (interface 2, usage_page 0x0B).
+    /// Accepts wired (22AE) and 2.4G dongle (FA60).
     pub fn open() -> Result<Self, String> {
         let api = HidApi::new().map_err(|e| format!("HID init failed: {e}"))?;
         let target = api
             .device_list()
             .find(|d| {
                 d.vendor_id() == protocol::VID
-                    && d.product_id() == protocol::PID
+                    && (d.product_id() == protocol::PID || d.product_id() == protocol::PID_DONGLE)
                     && d.interface_number() == 2
             })
             .ok_or_else(|| {
