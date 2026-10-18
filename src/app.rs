@@ -248,22 +248,46 @@ impl eframe::App for IgnixApp {
 
         // ---- top bar
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
+            ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("IGNIX V2").size(18.0).strong().color(ACCENT));
-                ui.label(egui::RichText::new("Linux Configurator").size(12.0).color(DIM));
+                // Logo mark: cyan square with mouse icon text
+                let (r, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+                ui.painter().rect_filled(r, 6.0, ACCENT);
+                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "V2",
+                    egui::FontId::proportional(13.0), egui::Color32::from_rgb(0x0e, 0x0e, 0x13));
+                ui.add_space(4.0);
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("IGNIX V2").size(16.0).strong().color(TEXT));
+                    ui.label(egui::RichText::new("Linux Configurator").size(10.0).color(DIM));
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if self.connected {
-                        ui.label(egui::RichText::new(format!("FW {}", self.firmware)).size(11.0).color(DIM));
-                        ui.label(egui::RichText::new(format!("Profile {}", self.profile_id)).size(11.0).color(DIM));
-                        ui.colored_label(GOOD, "●");
+                        // Status pill
+                        let pill = Self::card_frame(false);
+                        pill.show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.colored_label(GOOD, "●");
+                                ui.label(egui::RichText::new("Connected").size(11.0).color(GOOD));
+                                ui.add_space(8.0);
+                                ui.label(egui::RichText::new(format!("FW {}", self.firmware)).size(11.0).color(DIM));
+                                ui.label(egui::RichText::new(format!("P{}", self.profile_id)).size(11.0).color(ACCENT));
+                            });
+                        });
                     } else if self.connecting {
-                        ui.spinner(); ui.label("Connecting…");
+                        ui.spinner(); ui.label(egui::RichText::new("Connecting…").size(11.0).color(DIM));
                     } else {
-                        ui.colored_label(BAD, "● Disconnected");
-                        if ui.button("Retry").clicked() { self.spawn_connect(); }
+                        let pill = Self::card_frame(false);
+                        pill.show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.colored_label(BAD, "●");
+                                ui.label(egui::RichText::new("Disconnected").size(11.0).color(BAD));
+                                if ui.small_button("Retry").clicked() { self.spawn_connect(); }
+                            });
+                        });
                     }
                 });
             });
+            ui.add_space(4.0);
         });
 
         // ---- bottom bar
@@ -350,14 +374,31 @@ impl eframe::App for IgnixApp {
                 // Not connected? show empty state.
                 if !self.connected && !self.connecting {
                     ui.vertical_centered(|ui| {
-                        ui.add_space(60.0);
-                        ui.label(egui::RichText::new("Mouse not found").size(18.0).strong());
-                        ui.add_space(8.0);
-                        ui.label(egui::RichText::new(
-                            "Check the USB cable (wired mode) and the udev rule.\nSee README for setup."
-                        ).size(13.0).color(DIM));
+                        ui.add_space(50.0);
+                        // Icon: large disconnected symbol
+                        let (r, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
+                        ui.painter().circle_stroke(r.center(), 28.0, egui::Stroke::new(2.0, FAINT));
+                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "!",
+                            egui::FontId::proportional(28.0), FAINT);
                         ui.add_space(12.0);
-                        if ui.button("Retry").clicked() { self.spawn_connect(); }
+                        ui.label(egui::RichText::new("Mouse not found").size(20.0).strong().color(TEXT));
+                        ui.add_space(8.0);
+                        Self::card_frame(false).show(ui, |ui| {
+                            ui.set_min_width(320.0);
+                            ui.label(egui::RichText::new("Troubleshooting").size(12.0).strong().color(ACCENT));
+                            ui.add_space(4.0);
+                            for tip in [
+                                "1. Plug in via USB cable (wired mode)",
+                                "2. Install udev rule: see README",
+                                "3. Or run with sudo (not recommended)",
+                            ] {
+                                ui.label(egui::RichText::new(tip).size(12.0).color(DIM));
+                            }
+                        });
+                        ui.add_space(16.0);
+                        if ui.button(egui::RichText::new("Retry Connection").size(13.0)).clicked() {
+                            self.spawn_connect();
+                        }
                     });
                     return;
                 }
@@ -413,6 +454,20 @@ impl IgnixApp {
                     protocol::ButtonFunc::name(self.buttons.slots[idx].0)));
             let hovered = resp.hovered();
             let sel = self.selected_button == Some(idx);
+            // Always show a subtle dot indicator so users know it's clickable.
+            let dot_pos = r.center();
+            let dot_color = if sel || hovered {
+                ACCENT
+            } else {
+                egui::Color32::from_rgba_unmultiplied(0, 212, 255, 90)
+            };
+            ui.painter().circle_filled(dot_pos, if hovered || sel { 6.0 } else { 4.0 }, dot_color);
+            // Button number inside dot
+            if let Some((pos, _)) = F5V2_BUTTONS.iter().enumerate().find(|(_, (i, _))| *i == idx) {
+                ui.painter().text(dot_pos, egui::Align2::CENTER_CENTER,
+                    format!("{}", pos + 1), egui::FontId::proportional(9.0),
+                    egui::Color32::from_rgb(0x0e, 0x0e, 0x13));
+            }
             if hovered || sel {
                 // Glow effect: soft fill + bright ring
                 let glow = if sel {
@@ -424,14 +479,6 @@ impl IgnixApp {
                 ui.painter().rect_stroke(r, 12.0,
                     egui::Stroke::new(if sel { 2.5f32 } else { 1.5f32 },
                         if sel { ACCENT } else { egui::Color32::from_rgba_unmultiplied(0, 212, 255, 150) }));
-                // Button number badge
-                if let Some((pos, _)) = F5V2_BUTTONS.iter().enumerate().find(|(_, (i, _))| *i == idx) {
-                    let badge_pos = r.left_top() + egui::vec2(6.0, 6.0);
-                    ui.painter().circle_filled(badge_pos, 10.0, ACCENT);
-                    ui.painter().text(badge_pos, egui::Align2::CENTER_CENTER,
-                        format!("{}", pos + 1), egui::FontId::proportional(11.0),
-                        egui::Color32::from_rgb(0x0e, 0x0e, 0x13));
-                }
             }
             if resp.clicked() { clicked = Some(idx); }
         }
