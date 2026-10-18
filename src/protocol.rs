@@ -19,6 +19,7 @@ pub fn report_lens(report_id: u8) -> (usize, usize) {
         5 => (15, 64),   // lighting/debounce/sleep
         6 => (9, 64),    // polling rate
         8 => (59, 64),   // button remap
+        9 => (64, 64),   // macro upload (write-only)
         11 => (8, 6),    // firmware version (read-only)
         12 => (9, 6),    // profile id (read-only)
         160 => (8, 8),   // mailbox
@@ -464,4 +465,109 @@ pub fn mailbox_delay() -> Duration {
 }
 pub fn retry_delay() -> Duration {
     Duration::from_millis(300)
+}
+
+// ---------------------------------------------------------------- Macro (report 9)
+
+/// Mouse button codes used inside macros (not the same as button remap types).
+pub const MACRO_MOUSE_CODES: [(u8, &'static str); 5] = [
+    (241, "Left Click"),
+    (243, "Right Click"),
+    (242, "Middle Click"),
+    (244, "Back"),
+    (245, "Forward"),
+];
+
+#[derive(Debug, Clone)]
+pub struct MacroEvent {
+    /// Delay before this event, in milliseconds (10–12700).
+    pub delay_ms: u16,
+    /// HID keycode, or 241–245 for mouse buttons.
+    pub keycode: u8,
+    /// true = key/button release, false = press.
+    pub is_up: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Macro {
+    pub name: String,
+    /// 0 = play once, 1 = loop while held, 2 = toggle loop.
+    pub loop_type: u8,
+    pub events: Vec<MacroEvent>,
+}
+
+impl Default for Macro {
+    fn default() -> Self {
+        Self { name: String::new(), loop_type: 0, events: Vec::new() }
+    }
+}
+
+/// Encode one macro event to 2 bytes.
+/// Returns 2 or 4 bytes (long delays need an extension pair).
+fn encode_event(ev: &MacroEvent) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut delay = ev.delay_ms.max(10);
+    // Long delay extension: [s, 3] where s = delay/200, then remainder.
+    if delay > 1270 {
+        let s = (delay / 200).min(255) as u8;
+        out.push(s);
+        out.push(3);
+        delay -= s as u16 * 200;
+    }
+    let d = (delay / 10).min(127) as u8;
+    out.push(if ev.is_up { d | 0x80 } else { d & 0x7F });
+    out.push(ev.keycode);
+    out
+}
+
+/// Build the 128-byte macro buffer (see PROTOCOL.md).
+pub fn build_macro_buffer(m: &Macro) -> Vec<u8> {
+    let mut a = vec![0u8; 128];
+    a[0] = m.loop_type;
+    // bytes 1-3: RGB indicator (leave 0)
+    // byte 4: repeat count (leave 0 = default)
+    // bytes 5-23: reserved
+    let mut pos = 26;
+    let mut count = 0u16;
+    for ev in m.events.iter().take(50) {
+        let enc = encode_event(ev);
+        if pos + enc.len() > 126 { break; }
+        for b in enc { a[pos] = b; pos += 1; }
+        // Count logical events (not extension pairs).
+        count += 1;
+    }
+    a[24] = ((count >> 8) & 0xFF) as u8;
+    a[25] = (count & 0xFF) as u8;
+    let (hi, lo) = checksum(&a, 0, 126);
+    a[126] = hi;
+    a[127] = lo;
+    a
+}
+
+/// Build the 3 report-9 packets for uploading macro `idx` (0-based).
+/// Caller must sleep 666ms between sends.
+pub fn build_macro_packets(m: &Macro, idx: u8) -> [Vec<u8>; 3] {
+    let a = build_macro_buffer(m);
+    let mut p0 = vec![9, 64, idx + 1, 0];
+    p0.extend_from_slice(&a[0..59]);
+    p0.resize(64, 0);
+    let mut p1 = vec![9, 64, idx + 1, 1];
+    p1.extend_from_slice(&a[60..119]);
+    p1.resize(64, 0);
+    let mut p2 = vec![9, 12, idx + 1, 2];
+    p2.extend_from_slice(&a[120..128]);
+    p2.resize(64, 0);
+    [p0, p1, p2]
+}
+
+/// Auto-clicker preset: left click every `interval_ms`, loop while held.
+pub fn autoclicker_preset(interval_ms: u16) -> Macro {
+    Macro {
+        name: "Auto Clicker".to_string(),
+        loop_type: 1,
+        events: vec![
+            MacroEvent { delay_ms: 10, keycode: 241, is_up: false },
+            MacroEvent { delay_ms: interval_ms, keycode: 241, is_up: true },
+        ],
+    }
 }

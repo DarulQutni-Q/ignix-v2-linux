@@ -197,6 +197,17 @@ impl Mouse {
         Ok(())
     }
 
+    pub fn write_macro(&self, m: &protocol::Macro, idx: u8) -> Result<(), String> {
+        let pkts = protocol::build_macro_packets(m, idx);
+        for (i, pkt) in pkts.iter().enumerate() {
+            self.send_feature(pkt)?;
+            // 666ms between chunks — device is slow.
+            if i < 2 { thread::sleep(Duration::from_millis(666)); }
+        }
+        thread::sleep(Duration::from_millis(400));
+        Ok(())
+    }
+
     pub fn read_firmware(&self) -> Result<String, String> {
         // Report 11 does NOT use the mailbox polling; direct pattern.
         let req = mailbox_request(11, self.profile);

@@ -85,12 +85,17 @@ pub struct IgnixApp {
     rate: u32,
     light: LightConfig,
     buttons: ButtonMap,
+    macros: Vec<protocol::Macro>,
     dirty: bool,
 
     tab: Tab,
     selected_stage: usize,
     selected_button: Option<usize>,
+    selected_macro: usize,
     show_button_picker: bool,
+    // macro editor temp state
+    macro_new_delay: String,
+    macro_new_key: String,
 
     mouse_tex: Option<egui::TextureHandle>,
     rx: Option<mpsc::Receiver<JobResult>>,
@@ -107,8 +112,12 @@ impl IgnixApp {
             dpi: DpiConfig::default(), dpi_raw: Vec::new(),
             rate: 1000, light: LightConfig::default(),
             buttons: ButtonMap::default(), dirty: false,
+            macros: (0..32).map(|i| protocol::Macro {
+                name: format!("Macro {}", i + 1), ..Default::default()
+            }).collect(),
             tab: Tab::Dpi, selected_stage: 0,
-            selected_button: None, show_button_picker: false,
+            selected_button: None, selected_macro: 0, show_button_picker: false,
+            macro_new_delay: "100".into(), macro_new_key: String::new(),
             mouse_tex, rx: None,
         };
         app.spawn_connect();
@@ -289,23 +298,36 @@ impl eframe::App for IgnixApp {
                 ui.label(egui::RichText::new("Mouse").size(15.0).strong());
             });
             ui.add_space(4.0);
-            self.ui_mouse_photo(ui);
-            ui.add_space(12.0);
-            ui.separator();
+            // Reserve fixed height for image so info below never overlaps.
+            let img_h = 330.0;
+            let (img_rect_alloc, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), img_h), egui::Sense::hover());
+            // Render image inside a child UI clipped to that rect.
+            let mut img_ui = ui.child_ui(img_rect_alloc, *ui.layout(), None);
+            self.ui_mouse_photo(&mut img_ui);
             ui.add_space(8.0);
-            // Active DPI big display
-            if let Some(&v) = self.dpi.dpis.get(self.dpi.active) {
-                let c = self.dpi.colors.get(self.dpi.active).copied().unwrap_or([255,255,255]);
+            // Device info card
+            Self::card_frame(false).show(ui, |ui| {
+                ui.set_min_width(ui.available_width() - 16.0);
+                if let Some(&v) = self.dpi.dpis.get(self.dpi.active) {
+                    let c = self.dpi.colors.get(self.dpi.active).copied().unwrap_or([255,255,255]);
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                        ui.painter().circle_filled(r.center(), 6.0,
+                            egui::Color32::from_rgb(c[0], c[1], c[2]));
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new(format!("{v}")).size(24.0).strong());
+                            ui.label(egui::RichText::new("DPI").size(10.0).color(DIM));
+                        });
+                    });
+                }
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                    ui.painter().circle_filled(r.center(), 6.0,
-                        egui::Color32::from_rgb(c[0], c[1], c[2]));
-                    ui.label(egui::RichText::new(format!("{v}")).size(28.0).strong());
+                    ui.label(egui::RichText::new(format!("{} Hz", self.rate)).size(13.0).color(DIM));
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(format!("FW {}", self.firmware)).size(11.0).color(DIM));
                 });
-                ui.label(egui::RichText::new("DPI").size(11.0).color(DIM));
-            }
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(format!("{} Hz", self.rate)).size(13.0).color(DIM));
+            });
         });
 
         // ---- center: tabs + content
@@ -362,23 +384,28 @@ impl IgnixApp {
             Some(t) => t.clone(),
             None => { ui.label("no image"); return; }
         };
-        // Keep aspect, fit width 280.
-        let avail_w = 280.0;
+        // Fit image within available space, keep aspect, NO cropping.
         let (iw, ih) = (tex.size()[0] as f32, tex.size()[1] as f32);
-        let h = avail_w * ih / iw;
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(avail_w, h.min(420.0)), egui::Sense::hover());
-        // Draw cropped to fit (top portion contains the mouse).
-        let uv = egui::Rect::from_min_max(
-            egui::pos2(0.0, 0.0),
-            egui::pos2(1.0, (rect.height() / avail_w) * (iw / ih)),
+        let avail = ui.available_size();
+        let scale = (avail.x / iw).min(avail.y / ih).min(1.0);
+        let w = iw * scale;
+        let h = ih * scale;
+        // Center horizontally.
+        let x_off = (avail.x - w) / 2.0;
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(avail.x, h), egui::Sense::hover());
+        let img_rect = egui::Rect::from_min_size(
+            rect.min + egui::vec2(x_off, 0.0),
+            egui::vec2(w, h),
         );
-        ui.painter().image(tex.id(), rect, uv, egui::Color32::WHITE);
+        ui.painter().image(tex.id(), img_rect,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE);
 
         let mut clicked: Option<usize> = None;
         for (idx, (fx, fy, fw, fh)) in HOTSPOTS {
             let r = egui::Rect::from_min_size(
-                rect.min + egui::vec2(fx * rect.width(), fy * rect.height()),
-                egui::vec2(fw * rect.width(), fh * rect.height()),
+                img_rect.min + egui::vec2(fx * img_rect.width(), fy * img_rect.height()),
+                egui::vec2(fw * img_rect.width(), fh * img_rect.height()),
             );
             let resp = ui.allocate_rect(r, egui::Sense::click())
                 .on_hover_text(format!("{} — {}",
@@ -780,21 +807,166 @@ impl IgnixApp {
 // ---------------------------------------------------------------- Macros tab
 
 impl IgnixApp {
+    fn spawn_upload_macro(&mut self, idx: usize) {
+        let (tx, rx) = mpsc::channel();
+        self.rx = Some(rx);
+        self.applying = true;
+        let m = self.macros[idx].clone();
+        thread::spawn(move || {
+            let res: Result<String, String> = (|| {
+                let dev = Mouse::open()?;
+                dev.write_macro(&m, idx as u8)?;
+                Ok(format!("Macro {} uploaded.", idx + 1))
+            })();
+            let _ = tx.send(match res {
+                Ok(x) => JobResult::Applied(x),
+                Err(e) => JobResult::Error(e),
+            });
+        });
+    }
+
     fn ui_macros(&mut self, ui: &mut egui::Ui) {
         ui.label(egui::RichText::new("Macros").size(15.0).strong());
         ui.label(egui::RichText::new(
-            "32 slots. Assign a macro to a button in the Buttons tab."
+            "32 slots. Click a button on the mouse image, pick Macro, then choose a slot."
         ).size(11.0).color(DIM));
         ui.add_space(8.0);
-        Self::card_frame(false).show(ui, |ui| {
-            ui.label(egui::RichText::new(
-                "Macro recording/upload (report 9) is implemented in the protocol\n\
-                 but the recorder UI is not finished yet."
-            ).size(13.0).color(WARN));
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(
-                "Button → macro assignment works now. Full editor coming next update."
-            ).size(11.0).color(DIM));
+
+        ui.horizontal(|ui| {
+            // ---- slot list
+            egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
+                ui.vertical(|ui| {
+                    for i in 0..32 {
+                        let m = &self.macros[i];
+                        let label = if m.events.is_empty() {
+                            format!("{:2}. {}", i + 1, m.name)
+                        } else {
+                            format!("{:2}. {} ({} events)", i + 1, m.name, m.events.len())
+                        };
+                        let sel = self.selected_macro == i;
+                        if ui.selectable_label(sel, egui::RichText::new(label).size(12.0)).clicked() {
+                            self.selected_macro = i;
+                        }
+                    }
+                });
+            });
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(12.0);
+
+            // ---- editor
+            let idx = self.selected_macro;
+            // Copy temp state to avoid borrow conflicts.
+            let mut new_delay = self.macro_new_delay.clone();
+            let mut new_key = self.macro_new_key.clone();
+            let connected = self.connected;
+            let applying = self.applying;
+            ui.vertical(|ui| {
+                ui.set_min_width(380.0);
+                let m = &mut self.macros[idx];
+
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(format!("Slot {}", idx + 1)).size(14.0).strong());
+                    ui.add_space(8.0);
+                    // Auto-clicker preset
+                    if ui.small_button("Auto-clicker preset").clicked() {
+                        *m = protocol::autoclicker_preset(100);
+                        m.name = format!("Auto Clicker {}", idx + 1);
+                    }
+                });
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut m.name);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Loop:");
+                    let types = ["Once", "Loop while held", "Toggle"];
+                    for (ti, tn) in types.iter().enumerate() {
+                        if ui.selectable_label(m.loop_type as usize == ti, *tn).clicked() {
+                            m.loop_type = ti as u8;
+                        }
+                    }
+                });
+                ui.add_space(8.0);
+
+                ui.label(egui::RichText::new("Events").size(13.0).strong());
+                let mut del: Option<usize> = None;
+                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                    // borrow dance: collect display strings first
+                    let rows: Vec<String> = m.events.iter().map(|e| {
+                        let what = if e.keycode >= 241 && e.keycode <= 245 {
+                            protocol::MACRO_MOUSE_CODES.iter()
+                                .find(|(c, _)| *c == e.keycode)
+                                .map(|(_, n)| *n).unwrap_or("Mouse")
+                        } else {
+                            "Key"
+                        };
+                        let dir = if e.is_up { "up  " } else { "down" };
+                        format!("{}ms  {} {} (0x{:02X})", e.delay_ms, what, dir, e.keycode)
+                    }).collect();
+                    for (ei, row) in rows.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(row).size(12.0).monospace());
+                            if ui.small_button("x").clicked() { del = Some(ei); }
+                        });
+                    }
+                    if m.events.is_empty() {
+                        ui.label(egui::RichText::new("No events yet.").size(11.0).color(DIM));
+                    }
+                });
+                if let Some(ei) = del { m.events.remove(ei); }
+
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Add event").size(12.0).strong());
+                // Mouse click buttons
+                ui.horizontal_wrapped(|ui| {
+                    for (code, name) in protocol::MACRO_MOUSE_CODES {
+                        if ui.small_button(format!("+ {}", name)).clicked() {
+                            let d: u16 = new_delay.parse().unwrap_or(100);
+                            m.events.push(protocol::MacroEvent { delay_ms: 10, keycode: code, is_up: false });
+                            m.events.push(protocol::MacroEvent { delay_ms: d, keycode: code, is_up: true });
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Delay ms:");
+                    ui.text_edit_singleline(&mut new_delay);
+                    let d: u16 = new_delay.parse().unwrap_or(100).clamp(10, 12700);
+                    if ui.small_button("+ Delay").clicked() {
+                        // delay-only: use keycode 0 as no-op press with delay
+                        m.events.push(protocol::MacroEvent { delay_ms: d, keycode: 0, is_up: false });
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Keycode hex:");
+                    ui.text_edit_singleline(&mut new_key);
+                    if ui.small_button("+ Key down/up").clicked() {
+                        let kc = u8::from_str_radix(new_key.trim_start_matches("0x"), 16).unwrap_or(0);
+                        if kc != 0 {
+                            let d: u16 = new_delay.parse().unwrap_or(100);
+                            m.events.push(protocol::MacroEvent { delay_ms: 10, keycode: kc, is_up: false });
+                            m.events.push(protocol::MacroEvent { delay_ms: d, keycode: kc, is_up: true });
+                        }
+                    }
+                });
+
+                ui.add_space(12.0);
+                let can_upload = connected && !applying && !m.events.is_empty();
+                let event_count = m.events.len();
+                // End the mutable borrow before calling &mut self method.
+                let _ = m;
+                if ui.add_enabled(can_upload, egui::Button::new("Upload to Mouse")).clicked() {
+                    self.spawn_upload_macro(idx);
+                }
+                if event_count > 50 {
+                    ui.label(egui::RichText::new("Warning: >50 events, will be truncated.").color(WARN).size(11.0));
+                }
+            });
+            // Write back temp state.
+            self.macro_new_delay = new_delay;
+            self.macro_new_key = new_key;
         });
     }
 }

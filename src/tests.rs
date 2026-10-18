@@ -193,4 +193,32 @@ mod tests {
         assert_eq!(report_lens(6), (9, 64));
         assert_eq!(report_lens(11), (8, 6));
     }
+
+    #[test]
+    fn macro_buffer_layout() {
+        let m = autoclicker_preset(100);
+        let a = build_macro_buffer(&m);
+        assert_eq!(a.len(), 128);
+        assert_eq!(a[0], 1); // loop while held
+        // event count = 2, big-endian at 24-25
+        assert_eq!((a[24], a[25]), (0, 2));
+        // first event: key down, 10ms delay -> 0x01, 241
+        assert_eq!((a[26], a[27]), (1, 241));
+        // second event: key up, 100ms delay -> 0x8A, 241
+        assert_eq!((a[28], a[29]), (0x8A, 241));
+        // checksum covers bytes 0..126
+        let (hi, lo) = checksum(&a, 0, 126);
+        assert_eq!((a[126], a[127]), (hi, lo));
+    }
+
+    #[test]
+    fn macro_packets_shape() {
+        let m = autoclicker_preset(100);
+        let [p0, p1, p2] = build_macro_packets(&m, 0);
+        assert_eq!(p0.len(), 64);
+        assert_eq!(&p0[0..4], &[9, 64, 1, 0]);
+        assert_eq!(&p1[0..4], &[9, 64, 1, 1]);
+        assert_eq!(p2.len(), 64);
+        assert_eq!(&p2[0..4], &[9, 12, 1, 2]);
+    }
 }
