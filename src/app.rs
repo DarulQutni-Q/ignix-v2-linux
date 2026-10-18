@@ -122,6 +122,8 @@ impl IgnixApp {
             macro_new_delay: "100".into(), macro_new_key: String::new(),
             mouse_tex, rx: None,
         };
+        // Debug: fake connected state for layout testing (IGNIX_DEBUG=1)
+        // (removed before release)
         app.spawn_connect();
         app
     }
@@ -313,6 +315,49 @@ impl eframe::App for IgnixApp {
                 });
             });
 
+        // ---- footer (must be before CentralPanel)
+        egui::TopBottomPanel::bottom("bottom")
+            .frame(egui::Frame::none().fill(PAPER)
+                .inner_margin(egui::Margin { left: 28.0, right: 28.0, top: 12.0, bottom: 16.0 }))
+            .show(ctx, |ui| {
+                let r = ui.available_rect_before_wrap();
+                ui.painter().hline(r.x_range(), r.top() - 12.0, egui::Stroke::new(1.0, INK));
+                ui.horizontal(|ui| {
+                    if self.dirty {
+                        ui.label(egui::RichText::new("1 UNSAVED CHANGE")
+                            .font(Self::mono_font(11.0)).color(ACCENT));
+                    } else {
+                        ui.label(egui::RichText::new("ALL CHANGES SAVED")
+                            .font(Self::mono_font(11.0)).color(DIM));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let apply_txt = if self.applying { "APPLYING..." } else { "APPLY TO MOUSE →" };
+                        let btn = egui::Button::new(
+                            egui::RichText::new(apply_txt).font(Self::mono_bold_font(12.0)).color(WHITE)
+                        ).fill(INK).min_size(egui::vec2(180.0, 40.0));
+                        let resp = ui.add_enabled(
+                            self.connected && self.dirty && !self.applying && !self.connecting, btn);
+                        if resp.clicked() {
+                            self.status_msg = "Writing to device...".into();
+                            self.status_ok = true;
+                            self.spawn_apply();
+                        }
+                        if self.dirty {
+                            let rt = egui::RichText::new("Reset").font(Self::mono_font(12.0))
+                                .color(INK).underline();
+                            if ui.button(rt).clicked() {
+                                self.spawn_connect(); // re-read from device = reset
+                            }
+                        }
+                        if self.applying { ui.spinner(); }
+                    });
+                });
+                if !self.status_ok {
+                    ui.label(egui::RichText::new(self.status_msg.to_uppercase())
+                        .font(Self::mono_font(10.0)).color(DIM));
+                }
+            });
+
         // ---- right: paper panel
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(PAPER).inner_margin(egui::Margin::same(28.0)))
@@ -362,49 +407,6 @@ impl eframe::App for IgnixApp {
                         Tab::Macros => self.ui_macros(ui),
                     }
                 });
-            });
-
-        // ---- footer
-        egui::TopBottomPanel::bottom("bottom")
-            .frame(egui::Frame::none().fill(PAPER)
-                .inner_margin(egui::Margin { left: 28.0, right: 28.0, top: 12.0, bottom: 16.0 }))
-            .show(ctx, |ui| {
-                let r = ui.available_rect_before_wrap();
-                ui.painter().hline(r.x_range(), r.top() - 12.0, egui::Stroke::new(1.0, INK));
-                ui.horizontal(|ui| {
-                    if self.dirty {
-                        ui.label(egui::RichText::new("1 UNSAVED CHANGE")
-                            .font(Self::mono_font(11.0)).color(ACCENT));
-                    } else {
-                        ui.label(egui::RichText::new("ALL CHANGES SAVED")
-                            .font(Self::mono_font(11.0)).color(DIM));
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let apply_txt = if self.applying { "APPLYING..." } else { "APPLY TO MOUSE →" };
-                        let btn = egui::Button::new(
-                            egui::RichText::new(apply_txt).font(Self::mono_bold_font(12.0)).color(WHITE)
-                        ).fill(INK).min_size(egui::vec2(180.0, 40.0));
-                        let resp = ui.add_enabled(
-                            self.connected && self.dirty && !self.applying && !self.connecting, btn);
-                        if resp.clicked() {
-                            self.status_msg = "Writing to device...".into();
-                            self.status_ok = true;
-                            self.spawn_apply();
-                        }
-                        if self.dirty {
-                            let rt = egui::RichText::new("Reset").font(Self::mono_font(12.0))
-                                .color(INK).underline();
-                            if ui.button(rt).clicked() {
-                                self.spawn_connect(); // re-read from device = reset
-                            }
-                        }
-                        if self.applying { ui.spinner(); }
-                    });
-                });
-                if !self.status_ok {
-                    ui.label(egui::RichText::new(self.status_msg.to_uppercase())
-                        .font(Self::mono_font(10.0)).color(DIM));
-                }
             });
 
         if self.show_button_picker { self.ui_button_picker(ctx); }
@@ -572,8 +574,8 @@ impl IgnixApp {
 
         // Ruler-style stage selector
         let n = self.dpi.dpis.len();
-        let (ruler_rect, _) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width().min(640.0), 64.0), egui::Sense::hover());
+        let (ruler_rect, ruler_resp) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width().min(640.0), 64.0), egui::Sense::click());
         {
             let p = ui.painter().clone();
             let y0 = ruler_rect.top();
@@ -596,12 +598,24 @@ impl IgnixApp {
                 p.text(egui::pos2(x, y1 + 4.0), egui::Align2::CENTER_TOP,
                     format!("{}", self.dpi.dpis[s]), Self::mono_font(10.0),
                     if is_active { ACCENT } else if is_sel { INK } else { DIM });
-                // Click zone
-                let cr = egui::Rect::from_center_size(
-                    egui::pos2(x, (y0 + y1) / 2.0), egui::vec2(ruler_rect.width() / n as f32, 64.0));
-                let resp = ui.allocate_rect(cr, egui::Sense::click());
-                if resp.clicked() { self.selected_stage = s; }
-                if resp.double_clicked() { self.dpi.active = s; self.mark_dirty(); }
+            }
+        }
+        // Click/dblclick: map x position to nearest stage (single response, no extra allocates)
+        if ruler_resp.clicked() || ruler_resp.double_clicked() {
+            if let Some(pos) = ruler_resp.interact_pointer_pos() {
+                // Snap to nearest tick
+                let mut best = 0;
+                let mut best_d = f32::MAX;
+                for i in 0..n {
+                    let x = ruler_rect.min.x + (i as f32) * (ruler_rect.width() / (n.max(1) as f32 - 1.0).max(1.0));
+                    let d = (pos.x - x).abs();
+                    if d < best_d { best_d = d; best = i; }
+                }
+                self.selected_stage = best;
+                if ruler_resp.double_clicked() {
+                    self.dpi.active = best;
+                    self.mark_dirty();
+                }
             }
         }
         ui.add_space(8.0);
