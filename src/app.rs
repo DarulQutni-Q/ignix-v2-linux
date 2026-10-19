@@ -122,7 +122,7 @@ impl IgnixApp {
             macro_new_delay: "100".into(), macro_new_key: String::new(),
             mouse_tex, rx: None,
         };
-        // Debug hook removed (was IGNIX_DEBUG).
+        // (debug hook removed)
         app.spawn_connect();
         app
     }
@@ -463,6 +463,30 @@ impl IgnixApp {
         ui.add(egui::TextEdit::singleline(text)
             .font(Self::mono_font(11.0))
             .text_color(INK))
+    }
+
+    /// Stepper: [-] VALUE [+] — Swiss flat style, fully visible on PAPER.
+    /// Returns the new value if changed.
+    fn stepper(ui: &mut egui::Ui, value: i32, min: i32, max: i32, step: i32) -> Option<i32> {
+        let mut v = value;
+        let mut changed = false;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
+            if Self::outline_button(ui, "−").clicked() {
+                v = (v - step).max(min);
+                changed = true;
+            }
+            // Value in black box, white mono text
+            let (r, _) = ui.allocate_exact_size(egui::vec2(52.0, 30.0), egui::Sense::hover());
+            ui.painter().rect_filled(r, 0.0, INK);
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, format!("{v}"),
+                Self::mono_bold_font(13.0), WHITE);
+            if Self::outline_button(ui, "+").clicked() {
+                v = (v + step).min(max);
+                changed = true;
+            }
+        });
+        if changed { Some(v) } else { None }
     }
 }
 
@@ -875,20 +899,27 @@ impl IgnixApp {
 impl IgnixApp {
     fn ui_lighting(&mut self, ui: &mut egui::Ui) {
         Self::section(ui, "LIGHTING");
-        let mut mode = self.light.mode;
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("MODE").font(Self::mono_font(12.0)).color(DIM));
-            egui::ComboBox::from_id_source("lightmode")
-                .selected_text(LightMode::all().iter()
-                    .find(|(_,m)| *m==mode).map(|(n,_)| n.to_uppercase()).unwrap_or("?".into()))
-                .show_ui(ui, |ui| {
-                    for (n, m) in LightMode::all() {
-                        ui.selectable_value(&mut mode, *m, n.to_uppercase());
-                    }
-                });
-        });
-        if mode != self.light.mode { self.light.mode = mode; self.mark_dirty(); }
+        ui.label(egui::RichText::new("MODE").font(Self::mono_font(12.0)).color(DIM));
         ui.add_space(4.0);
+        // Mode selector: wrapped row of flat buttons, selected = black fill
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+            for (n, m) in LightMode::all() {
+                let sel = self.light.mode == *m;
+                let txt = egui::RichText::new(n.to_uppercase())
+                    .font(Self::mono_font(11.0))
+                    .color(if sel { WHITE } else { INK });
+                let btn = egui::Button::new(txt)
+                    .fill(if sel { INK } else { PAPER })
+                    .stroke(egui::Stroke::new(1.0, INK))
+                    .min_size(egui::vec2(0.0, 30.0));
+                if ui.add(btn).clicked() {
+                    self.light.mode = *m;
+                    self.mark_dirty();
+                }
+            }
+        });
+        ui.add_space(8.0);
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("COLOR").font(Self::mono_font(12.0)).color(DIM));
@@ -907,8 +938,7 @@ impl IgnixApp {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("BRIGHTNESS").font(Self::mono_font(12.0)).color(DIM));
             if self.light.mode.uses_brightness() {
-                let mut b = self.light.brightness as i32;
-                if ui.add(egui::Slider::new(&mut b, 0..=15).show_value(true)).changed() {
+                if let Some(b) = Self::stepper(ui, self.light.brightness as i32, 0, 15, 1) {
                     self.light.brightness = b as u8; self.mark_dirty();
                 }
             } else {
@@ -918,8 +948,7 @@ impl IgnixApp {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("SPEED").font(Self::mono_font(12.0)).color(DIM));
             if self.light.mode.uses_speed() {
-                let mut s = self.light.speed as i32;
-                if ui.add(egui::Slider::new(&mut s, 0..=15).show_value(true)).changed() {
+                if let Some(s) = Self::stepper(ui, self.light.speed as i32, 0, 15, 1) {
                     self.light.speed = s as u8; self.mark_dirty();
                 }
             } else {
@@ -929,19 +958,19 @@ impl IgnixApp {
 
         Self::hairline(ui);
         Self::section(ui, "POWER");
-        let mut s1 = self.light.sleep1_min as i32;
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("DIM AFTER").font(Self::mono_font(12.0)).color(DIM));
-            if ui.add(egui::Slider::new(&mut s1, 0..=60).text("MIN")).changed() {
+            if let Some(s1) = Self::stepper(ui, self.light.sleep1_min as i32, 0, 60, 1) {
                 self.light.sleep1_min = s1 as u8; self.mark_dirty();
             }
+            ui.label(egui::RichText::new("MIN").font(Self::mono_font(10.0)).color(FAINT));
         });
-        let mut s2 = self.light.sleep2_min as i32;
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("SLEEP AFTER").font(Self::mono_font(12.0)).color(DIM));
-            if ui.add(egui::Slider::new(&mut s2, 0..=60).text("MIN")).changed() {
+            if let Some(s2) = Self::stepper(ui, self.light.sleep2_min as i32, 0, 60, 1) {
                 self.light.sleep2_min = s2 as u8; self.mark_dirty();
             }
+            ui.label(egui::RichText::new("MIN").font(Self::mono_font(10.0)).color(FAINT));
         });
     }
 }
@@ -979,14 +1008,13 @@ impl IgnixApp {
 
         Self::hairline(ui);
         Self::section(ui, "CLICK RESPONSE");
-        let mut db = self.light.debounce_ms as i32;
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("DEBOUNCE").font(Self::mono_font(12.0)).color(DIM));
-            let resp = ui.add(egui::Slider::new(&mut db, 2..=20).text("MS"))
-                .on_hover_text("Lower = faster clicks, higher double-click risk.");
-            if resp.changed() {
+            if let Some(db) = Self::stepper(ui, self.light.debounce_ms as i32, 2, 20, 1) {
                 self.light.debounce_ms = db as u8; self.mark_dirty();
             }
+            ui.label(egui::RichText::new("MS — LOWER = FASTER, HIGHER DBL-CLICK RISK")
+                .font(Self::mono_font(10.0)).color(FAINT));
         });
         ui.label(egui::RichText::new("DEFAULT 8 MS").font(Self::mono_font(10.0)).color(FAINT));
     }
