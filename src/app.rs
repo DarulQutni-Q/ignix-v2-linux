@@ -33,11 +33,6 @@ const HOTSPOTS: [(usize, (f32, f32, f32, f32)); 6] = [
 const CALLOUT_SIDE: [(usize, bool); 6] = [
     (0, true), (1, false), (2, false), (3, true), (4, true), (8, false),
 ];
-// Display names for callouts (short, uppercase).
-const CALLOUT_NAMES: [(usize, &str); 6] = [
-    (0, "LEFT CLICK"), (1, "RIGHT CLICK"), (2, "WHEEL CLICK"),
-    (3, "BACK"), (4, "FORWARD"), (8, "DPI CYCLE"),
-];
 
 // ---------------------------------------------------------------- tabs
 
@@ -536,7 +531,7 @@ impl IgnixApp {
                 p.rect_stroke(r, 0.0, egui::Stroke::new(2.0, WHITE));
             }
 
-            // Callout: number + name with hairline leader.
+            // Callout: number + CURRENT FUNCTION NAME with hairline leader.
             // Stagger right-side labels vertically to avoid overlap.
             let on_left = CALLOUT_SIDE.iter().find(|(i,_)| *i==idx).map(|(_,s)| *s).unwrap_or(true);
             let cy = r.center().y;
@@ -552,11 +547,23 @@ impl IgnixApp {
             };
             let ly = cy + y_off;
             let num_txt = format!("{:02}", n + 1);
-            let name = CALLOUT_NAMES.iter().find(|(i,_)| *i==idx).map(|(_,s)| *s).unwrap_or("?");
-            let label_x = if on_left { rect.min.x + 6.0 } else { rect.max.x - 72.0 };
+            // Use ACTUAL current function (updates when remapped), not static name.
+            // Show physical button name + current function if different.
+            let func_display = {
+                let (t, _, c2) = self.buttons.slots[idx];
+                let fname = protocol::ButtonFunc::name(t);
+                if t == protocol::ButtonFunc::MACRO {
+                    format!("MACRO {:02}", c2.max(1))
+                } else if t == protocol::ButtonFunc::KEYBOARD {
+                    format!("KEY 0x{c2:02X}")
+                } else {
+                    fname.to_uppercase()
+                }
+            };
+            let label_x = if on_left { rect.min.x + 6.0 } else { rect.max.x - 78.0 };
             let anchor_x = if on_left { r.min.x } else { r.max.x };
             // Leader hairline: horizontal from label to hotspot, then vertical jog if offset.
-            let line_start_x = if on_left { label_x + 64.0 } else { label_x };
+            let line_start_x = if on_left { label_x + 70.0 } else { label_x };
             if y_off.abs() > 1.0 {
                 // Elbow: horizontal from label, vertical to hotspot y, horizontal to hotspot.
                 let mid_x = if on_left { line_start_x + 14.0 } else { line_start_x - 14.0 };
@@ -570,11 +577,11 @@ impl IgnixApp {
                 p.line_segment([egui::pos2(line_start_x, cy), egui::pos2(anchor_x, cy)],
                     egui::Stroke::new(1.0, WHITE));
             }
-            // Number (mono bold) and name below, left-aligned in margin.
-            p.text(egui::pos2(label_x, ly - 20.0), egui::Align2::LEFT_TOP,
-                num_txt, Self::mono_bold_font(11.0), WHITE);
+            // Number (bigger, bolder) and function name below — clearer on blue.
+            p.text(egui::pos2(label_x, ly - 24.0), egui::Align2::LEFT_TOP,
+                num_txt, Self::mono_bold_font(14.0), WHITE);
             p.text(egui::pos2(label_x, ly - 6.0), egui::Align2::LEFT_TOP,
-                name, Self::mono_font(9.0), WHITE);
+                func_display, Self::mono_bold_font(10.0), WHITE);
 
             if resp.clicked() { clicked = Some(idx); }
         }
