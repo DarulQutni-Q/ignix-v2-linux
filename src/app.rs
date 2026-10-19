@@ -827,7 +827,10 @@ impl IgnixApp {
                 .inner_margin(egui::Margin::same(20.0)))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
-                ui.set_min_width(340.0);
+                ui.set_min_width(420.0);
+                ui.set_max_width(420.0);
+                egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
+                    ui.set_min_width(400.0);
                 let groups: &[(&str, &[u8], &[&str])] = &[
                     ("MOUSE", &[2,3,4,5,6,7,9,10,11,12],
                      &["Left click","Right click","Middle click","Back","Forward","Double click",
@@ -901,14 +904,35 @@ impl IgnixApp {
                     });
                     ui.add_space(8.0);
                     Self::hairline(ui);
-                    ui.label(egui::RichText::new("OR PICK SLOT MANUALLY")
+                    ui.label(egui::RichText::new("YOUR MACROS — PICK ONE TO ASSIGN")
+                        .font(Self::mono_bold_font(11.0)).color(DIM));
+                    ui.label(egui::RichText::new("Make custom macros in the MACROS tab first.")
                         .font(Self::mono_font(10.0)).color(FAINT));
-                    let mut mid = cur_c2.clamp(1, 32) as i32;
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("MACRO SLOT").font(Self::mono_font(11.0)).color(DIM));
-                        if ui.add(egui::DragValue::new(&mut mid).range(1..=32)).changed() {
-                            self.buttons.slots[idx].2 = mid as u8;
-                            self.mark_dirty();
+                    ui.add_space(4.0);
+                    // Scrollable list of all 32 slots with names
+                    egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                        ui.set_min_width(300.0);
+                        let cur_slot = cur_c2.clamp(1, 32) as usize;
+                        for s in 0..32 {
+                            let m = &self.macros[s];
+                            let sel = cur_slot == s + 1;
+                            let label = if m.events.is_empty() {
+                                format!("{:02}  — EMPTY —", s + 1)
+                            } else {
+                                format!("{:02}  {} [{} EVENTS]", s + 1,
+                                    m.name.to_uppercase(), m.events.len())
+                            };
+                            let txt = egui::RichText::new(label)
+                                .font(Self::mono_font(11.0))
+                                .color(if sel { WHITE } else if m.events.is_empty() { FAINT } else { INK });
+                            let btn = egui::Button::new(txt)
+                                .fill(if sel { INK } else { PAPER })
+                                .stroke(egui::Stroke::NONE)
+                                .min_size(egui::vec2(300.0, 26.0));
+                            if ui.add(btn).clicked() {
+                                self.buttons.slots[idx] = (protocol::ButtonFunc::MACRO, 0, (s + 1) as u8);
+                                self.mark_dirty();
+                            }
                         }
                     });
                 }
@@ -924,6 +948,7 @@ impl IgnixApp {
                 if ui.add(btn).clicked() {
                     self.show_button_picker = false;
                 }
+                }); // end ScrollArea
             });
     }
 }
