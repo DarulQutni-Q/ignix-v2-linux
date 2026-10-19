@@ -122,8 +122,7 @@ impl IgnixApp {
             macro_new_delay: "100".into(), macro_new_key: String::new(),
             mouse_tex, rx: None,
         };
-        // Debug: fake connected state for layout testing (IGNIX_DEBUG=1)
-        // (removed before release)
+        // Debug hook removed (was IGNIX_DEBUG).
         app.spawn_connect();
         app
     }
@@ -450,6 +449,21 @@ impl IgnixApp {
         ui.label(egui::RichText::new(title).font(Self::mono_bold_font(11.0)).color(DIM));
         ui.add_space(6.0);
     }
+
+    /// Secondary button: paper fill, 1px ink outline, ink text. Visible on PAPER.
+    fn outline_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        let txt = egui::RichText::new(label).font(Self::mono_font(11.0)).color(INK);
+        ui.add(egui::Button::new(txt)
+            .fill(PAPER)
+            .stroke(egui::Stroke::new(1.0, INK)))
+    }
+
+    /// Text field with mono font on PAPER.
+    fn bordered_text_edit(ui: &mut egui::Ui, text: &mut String) -> egui::Response {
+        ui.add(egui::TextEdit::singleline(text)
+            .font(Self::mono_font(11.0))
+            .text_color(INK))
+    }
 }
 
 // ---------------------------------------------------------------- mouse photo
@@ -660,13 +674,13 @@ impl IgnixApp {
             ui.add_space(16.0);
             if self.dpi.active == i {
                 ui.label(egui::RichText::new("ACTIVE").font(Self::mono_bold_font(11.0)).color(ACCENT));
-            } else if ui.button(egui::RichText::new("SET ACTIVE").font(Self::mono_font(11.0))).clicked() {
+            } else if Self::outline_button(ui, "SET ACTIVE").clicked() {
                 self.dpi.active = i;
                 self.mark_dirty();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if self.dpi.dpis.len() > 1 {
-                    if ui.button(egui::RichText::new("REMOVE").font(Self::mono_font(11.0))).clicked() {
+                    if Self::outline_button(ui, "REMOVE").clicked() {
                         self.dpi.dpis.remove(i);
                         self.dpi.colors.remove(i);
                         self.dpi.active = self.dpi.active.min(self.dpi.dpis.len() - 1);
@@ -675,7 +689,7 @@ impl IgnixApp {
                     }
                 }
                 if self.dpi.dpis.len() < 6 {
-                    if ui.button(egui::RichText::new("+ ADD STAGE").font(Self::mono_font(11.0))).clicked() {
+                    if Self::outline_button(ui, "+ ADD STAGE").clicked() {
                         let last = *self.dpi.dpis.last().unwrap_or(&800);
                         self.dpi.dpis.push((last + 400).min(30000));
                         self.dpi.colors.push([255, 255, 255]);
@@ -692,7 +706,13 @@ impl IgnixApp {
             ui.label(egui::RichText::new("ANGLE SNAPPING").font(Self::mono_font(12.0)).color(INK));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let txt = if snap { "ON" } else { "OFF" };
-                if ui.selectable_label(snap, egui::RichText::new(txt).font(Self::mono_bold_font(11.0))).clicked() {
+                let btxt = egui::RichText::new(txt).font(Self::mono_bold_font(11.0))
+                    .color(if snap { WHITE } else { INK });
+                let btn = egui::Button::new(btxt)
+                    .fill(if snap { INK } else { PAPER })
+                    .stroke(egui::Stroke::new(1.0, INK))
+                    .min_size(egui::vec2(60.0, 26.0));
+                if ui.add(btn).clicked() {
                     snap = !snap;
                     self.dpi.angle_snapping = if snap { 1 } else { 0 };
                     self.mark_dirty();
@@ -704,7 +724,13 @@ impl IgnixApp {
             ui.label(egui::RichText::new("RIPPLE CONTROL").font(Self::mono_font(12.0)).color(INK));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let txt = if rip { "ON" } else { "OFF" };
-                if ui.selectable_label(rip, egui::RichText::new(txt).font(Self::mono_bold_font(11.0))).clicked() {
+                let btxt = egui::RichText::new(txt).font(Self::mono_bold_font(11.0))
+                    .color(if rip { WHITE } else { INK });
+                let btn = egui::Button::new(btxt)
+                    .fill(if rip { INK } else { PAPER })
+                    .stroke(egui::Stroke::new(1.0, INK))
+                    .min_size(egui::vec2(60.0, 26.0));
+                if ui.add(btn).clicked() {
                     rip = !rip;
                     self.dpi.ripple = if rip { 1 } else { 0 };
                     self.mark_dirty();
@@ -996,24 +1022,30 @@ impl IgnixApp {
         ui.horizontal(|ui| {
             // ---- slot list (flat rows)
             egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                ui.set_min_width(200.0);
-                for i in 0..32 {
-                    let m = &self.macros[i];
-                    let sel = self.selected_macro == i;
+                ui.vertical(|ui| {
+                    ui.set_min_width(200.0);
+                    for i in 0..32 {
+                        let m = &self.macros[i];
+                        let sel = self.selected_macro == i;
+                        let r = ui.available_rect_before_wrap();
+                        ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
+                        let label = if m.events.is_empty() {
+                            format!("{:02}  {}", i + 1, m.name.to_uppercase())
+                        } else {
+                            format!("{:02}  {} [{}]", i + 1, m.name.to_uppercase(), m.events.len())
+                        };
+                        // Swiss style: selected = black fill + white text (no default blue selection)
+                        let txt = egui::RichText::new(label).font(Self::mono_font(11.0))
+                            .color(if sel { WHITE } else { INK });
+                        let btn = egui::Button::new(txt)
+                            .fill(if sel { INK } else { PAPER })
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::vec2(200.0, 26.0));
+                        if ui.add(btn).clicked() { self.selected_macro = i; }
+                    }
                     let r = ui.available_rect_before_wrap();
                     ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
-                    let label = if m.events.is_empty() {
-                        format!("{:02}  {}", i + 1, m.name.to_uppercase())
-                    } else {
-                        format!("{:02}  {} [{}]", i + 1, m.name.to_uppercase(), m.events.len())
-                    };
-                    let resp = ui.selectable_label(sel,
-                        egui::RichText::new(label).font(Self::mono_font(11.0))
-                            .color(if sel { ACCENT } else { INK }));
-                    if resp.clicked() { self.selected_macro = i; }
-                }
-                let r = ui.available_rect_before_wrap();
-                ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, HAIRLINE));
+                });
             });
             ui.add_space(20.0);
 
@@ -1031,8 +1063,7 @@ impl IgnixApp {
                     ui.label(egui::RichText::new(format!("SLOT {:02}", idx + 1))
                         .font(Self::display_font(22.0)).color(INK));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button(egui::RichText::new("AUTO-CLICKER PRESET")
-                            .font(Self::mono_font(10.0))).clicked() {
+                        if Self::outline_button(ui, "AUTO-CLICKER PRESET").clicked() {
                             *m = protocol::autoclicker_preset(100);
                             m.name = format!("Auto Clicker {}", idx + 1);
                         }
@@ -1042,13 +1073,19 @@ impl IgnixApp {
 
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("NAME").font(Self::mono_font(11.0)).color(DIM));
-                    ui.text_edit_singleline(&mut m.name);
+                    Self::bordered_text_edit(ui, &mut m.name);
                 });
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("LOOP").font(Self::mono_font(11.0)).color(DIM));
                     for (ti, tn) in ["ONCE", "WHILE HELD", "TOGGLE"].iter().enumerate() {
-                        if ui.selectable_label(m.loop_type as usize == ti,
-                            egui::RichText::new(*tn).font(Self::mono_font(11.0))).clicked() {
+                        let sel = m.loop_type as usize == ti;
+                        let txt = egui::RichText::new(*tn).font(Self::mono_font(11.0))
+                            .color(if sel { WHITE } else { INK });
+                        let btn = egui::Button::new(txt)
+                            .fill(if sel { INK } else { PAPER })
+                            .stroke(egui::Stroke::new(1.0, INK))
+                            .min_size(egui::vec2(0.0, 26.0));
+                        if ui.add(btn).clicked() {
                             m.loop_type = ti as u8;
                         }
                     }
@@ -1075,7 +1112,7 @@ impl IgnixApp {
                                 .font(Self::mono_font(10.0)).color(FAINT));
                             ui.label(egui::RichText::new(row).font(egui::FontId::monospace(11.0)).color(INK));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button(egui::RichText::new("×").font(Self::mono_font(12.0))).clicked() {
+                                if Self::outline_button(ui, "×").clicked() {
                                     del = Some(ei);
                                 }
                             });
@@ -1092,8 +1129,7 @@ impl IgnixApp {
                 ui.label(egui::RichText::new("ADD EVENT").font(Self::mono_bold_font(11.0)).color(DIM));
                 ui.horizontal_wrapped(|ui| {
                     for (code, name) in protocol::MACRO_MOUSE_CODES {
-                        if ui.button(egui::RichText::new(format!("+ {}", name.to_uppercase()))
-                            .font(Self::mono_font(10.0))).clicked() {
+                        if Self::outline_button(ui, &format!("+ {}", name.to_uppercase())).clicked() {
                             let d: u16 = new_delay.parse().unwrap_or(100);
                             m.events.push(protocol::MacroEvent { delay_ms: 10, keycode: code, is_up: false });
                             m.events.push(protocol::MacroEvent { delay_ms: d, keycode: code, is_up: true });
@@ -1102,16 +1138,16 @@ impl IgnixApp {
                 });
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("DELAY MS").font(Self::mono_font(10.0)).color(DIM));
-                    ui.text_edit_singleline(&mut new_delay);
-                    if ui.button(egui::RichText::new("+ DELAY").font(Self::mono_font(10.0))).clicked() {
+                    Self::bordered_text_edit(ui, &mut new_delay);
+                    if Self::outline_button(ui, "+ DELAY").clicked() {
                         let d: u16 = new_delay.parse().unwrap_or(100).clamp(10, 12700);
                         m.events.push(protocol::MacroEvent { delay_ms: d, keycode: 0, is_up: false });
                     }
                 });
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("KEY HEX").font(Self::mono_font(10.0)).color(DIM));
-                    ui.text_edit_singleline(&mut new_key);
-                    if ui.button(egui::RichText::new("+ KEY").font(Self::mono_font(10.0))).clicked() {
+                    Self::bordered_text_edit(ui, &mut new_key);
+                    if Self::outline_button(ui, "+ KEY").clicked() {
                         let kc = u8::from_str_radix(new_key.trim_start_matches("0x"), 16).unwrap_or(0);
                         if kc != 0 {
                             let d: u16 = new_delay.parse().unwrap_or(100);
