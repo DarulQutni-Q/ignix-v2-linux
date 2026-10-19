@@ -195,6 +195,11 @@ impl Mouse {
         let pkt = protocol::build_buttons(map, self.profile);
         self.write_config(&pkt)?;
         thread::sleep(Duration::from_millis(400));
+        // Verify by reading back.
+        let back = self.read_buttons()?;
+        if back.slots != map.slots {
+            return Err("Button verify failed: readback mismatch".to_string());
+        }
         Ok(())
     }
 

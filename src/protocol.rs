@@ -280,7 +280,8 @@ pub fn parse_light(d: &[u8]) -> Result<LightConfig, String> {
         return Err("Bad light report".into());
     }
     let mode = LightMode::from_u8((d[3] >> 4) & 0x0F).unwrap_or(LightMode::Off);
-    let sleep2 = ((d[5] >> 4) & 0x0F) | ((d[4] >> 4) & 0x0F);
+    // Official JS: a = o[4]>>4 & 15, i = o[5]>>4 & 15, sleep2 = a<<4 | i
+    let sleep2 = (((d[4] >> 4) & 0x0F) << 4) | ((d[5] >> 4) & 0x0F);
     Ok(LightConfig {
         mode,
         color: [d[6], d[7], d[8]],

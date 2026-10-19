@@ -221,11 +221,30 @@ impl IgnixApp {
                 let mut m = Mouse::open()?;
                 m.set_profile(profile_id);
                 let base = if dpi_raw.is_empty() { None } else { Some(dpi_raw.as_slice()) };
-                m.write_dpi(&dpi, base)?;
-                m.write_rate(rate)?;
-                m.write_light(&light)?;
-                m.write_buttons(&buttons)?;
-                Ok("Applied & verified.".to_string())
+                let mut parts = Vec::new();
+                let mut failed = Vec::new();
+                match m.write_dpi(&dpi, base) {
+                    Ok(()) => parts.push("DPI"),
+                    Err(e) => failed.push(format!("DPI: {}", e)),
+                }
+                match m.write_rate(rate) {
+                    Ok(()) => parts.push("RATE"),
+                    Err(e) => failed.push(format!("RATE: {}", e)),
+                }
+                match m.write_light(&light) {
+                    Ok(()) => parts.push("LIGHT"),
+                    Err(e) => failed.push(format!("LIGHT: {}", e)),
+                }
+                match m.write_buttons(&buttons) {
+                    Ok(()) => parts.push("BUTTONS"),
+                    Err(e) => failed.push(format!("BUTTONS: {}", e)),
+                }
+                if failed.is_empty() {
+                    Ok(format!("Applied & verified: {}.", parts.join(", ")))
+                } else {
+                    Err(format!("Partial apply. OK: {}. Failed: {}.",
+                        parts.join(", "), failed.join("; ")))
+                }
             })();
             let _ = tx.send(match res {
                 Ok(x) => JobResult::Applied(x),

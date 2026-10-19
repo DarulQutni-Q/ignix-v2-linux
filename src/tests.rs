@@ -133,6 +133,20 @@ mod tests {
     }
 
     #[test]
+    fn light_sleep2_roundtrip_high_nibble() {
+        // Regression test: sleep2 >= 16 uses the high nibble of byte 4.
+        // Old buggy decode dropped the <<4, returning 11 instead of 171.
+        for &sleep2 in &[10u8, 16, 20, 30, 171, 255] {
+            let cfg = LightConfig { sleep2_min: sleep2, ..Default::default() };
+            let pkt = build_light(&cfg, 1);
+            let mut read = pkt.clone();
+            read.resize(64, 0);
+            let back = parse_light(&read).unwrap();
+            assert_eq!(back.sleep2_min, sleep2, "sleep2={}", sleep2);
+        }
+    }
+
+    #[test]
     fn light_mode_properties() {
         assert!(LightMode::Static.uses_color());
         assert!(!LightMode::Rainbow.uses_color());
