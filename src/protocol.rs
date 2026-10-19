@@ -572,3 +572,58 @@ pub fn autoclicker_preset(interval_ms: u16) -> Macro {
         ],
     }
 }
+
+// ---------------------------------------------------------------- macro presets
+
+/// HID modifier codes.
+pub const HID_LCTRL: u8 = 0xE0;
+pub const HID_LSHIFT: u8 = 0xE1;
+pub const HID_LALT: u8 = 0xE2;
+
+/// Helper: key combo macro (e.g. Ctrl+C). Presses modifiers, then key, releases in reverse.
+fn key_combo(name: &str, mods: &[u8], key: u8) -> Macro {
+    let mut events = Vec::new();
+    // Press modifiers
+    for &m in mods {
+        events.push(MacroEvent { delay_ms: 10, keycode: m, is_up: false });
+    }
+    // Press key
+    events.push(MacroEvent { delay_ms: 10, keycode: key, is_up: false });
+    // Release key
+    events.push(MacroEvent { delay_ms: 10, keycode: key, is_up: true });
+    // Release modifiers (reverse order)
+    for &m in mods.iter().rev() {
+        events.push(MacroEvent { delay_ms: 10, keycode: m, is_up: true });
+    }
+    Macro { name: name.to_string(), loop_type: 0, events }
+}
+
+/// Helper: simple mouse click sequence.
+fn click_seq(name: &str, code: u8, count: u8, interval_ms: u16) -> Macro {
+    let mut events = Vec::new();
+    for _ in 0..count {
+        events.push(MacroEvent { delay_ms: 10, keycode: code, is_up: false });
+        events.push(MacroEvent { delay_ms: interval_ms, keycode: code, is_up: true });
+    }
+    Macro { name: name.to_string(), loop_type: 0, events }
+}
+
+/// Ready-to-use macro presets: (display name, Macro).
+/// HID codes: A=0x04 C=0x06 F=0x09 S=0x16 T=0x17 V=0x19 W=0x1A X=0x1B Y=0x1C Z=0x1D
+pub fn macro_presets() -> Vec<(&'static str, Macro)> {
+    vec![
+        ("DOUBLE CLICK", click_seq("Double Click", 241, 2, 50)),
+        ("TRIPLE CLICK", click_seq("Triple Click", 241, 3, 50)),
+        ("AUTO CLICKER", autoclicker_preset(100)),
+        ("COPY", key_combo("Copy", &[HID_LCTRL], 0x06)),
+        ("PASTE", key_combo("Paste", &[HID_LCTRL], 0x19)),
+        ("CUT", key_combo("Cut", &[HID_LCTRL], 0x1B)),
+        ("UNDO", key_combo("Undo", &[HID_LCTRL], 0x1D)),
+        ("REDO", key_combo("Redo", &[HID_LCTRL], 0x1C)),
+        ("SELECT ALL", key_combo("Select All", &[HID_LCTRL], 0x04)),
+        ("SAVE", key_combo("Save", &[HID_LCTRL], 0x16)),
+        ("FIND", key_combo("Find", &[HID_LCTRL], 0x09)),
+        ("NEW TAB", key_combo("New Tab", &[HID_LCTRL], 0x17)),
+        ("CLOSE TAB", key_combo("Close Tab", &[HID_LCTRL], 0x1A)),
+    ]
+}

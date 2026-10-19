@@ -869,6 +869,33 @@ impl IgnixApp {
                     self.mark_dirty();
                 }
                 if cur_t == protocol::ButtonFunc::MACRO {
+                    ui.label(egui::RichText::new("QUICK PRESETS — PICK ONE, DONE")
+                        .font(Self::mono_bold_font(11.0)).color(ACCENT));
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                        for (pname, preset) in protocol::macro_presets() {
+                            if Self::outline_button(ui, pname).clicked() {
+                                // Find first empty slot, else reuse slot 0
+                                let slot = self.macros.iter().position(|m| m.events.is_empty()).unwrap_or(0);
+                                let mut pm = preset.clone();
+                                pm.name = format!("{} (btn {})", preset.name, idx + 1);
+                                self.macros[slot] = pm;
+                                self.buttons.slots[idx] = (protocol::ButtonFunc::MACRO, 0, (slot + 1) as u8);
+                                self.mark_dirty();
+                                // Upload macro immediately so it's ready when Apply sends the button map
+                                if self.connected {
+                                    self.spawn_upload_macro(slot);
+                                }
+                                self.show_button_picker = false;
+                                break;
+                            }
+                        }
+                    });
+                    ui.add_space(8.0);
+                    Self::hairline(ui);
+                    ui.label(egui::RichText::new("OR PICK SLOT MANUALLY")
+                        .font(Self::mono_font(10.0)).color(FAINT));
                     let mut mid = cur_c2.clamp(1, 32) as i32;
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("MACRO SLOT").font(Self::mono_font(11.0)).color(DIM));

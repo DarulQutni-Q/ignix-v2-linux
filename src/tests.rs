@@ -221,4 +221,29 @@ mod tests {
         assert_eq!(p2.len(), 64);
         assert_eq!(&p2[0..4], &[9, 12, 1, 2]);
     }
+
+    #[test]
+    fn macro_presets_encode() {
+        // All presets must build valid 128-byte buffers with correct event counts.
+        for (name, m) in macro_presets() {
+            let buf = build_macro_buffer(&m);
+            assert_eq!(buf.len(), 128, "preset {name}");
+            let count = ((buf[24] as u16) << 8) | buf[25] as u16;
+            assert_eq!(count as usize, m.events.len(), "preset {name} count");
+            // checksum valid
+            let (hi, lo) = checksum(&buf, 0, 126);
+            assert_eq!((buf[126], buf[127]), (hi, lo), "preset {name} checksum");
+        }
+        // Spot check: COPY = Ctrl down, C down, C up, Ctrl up
+        let (_, copy) = macro_presets().into_iter().find(|(n,_)| *n=="COPY").unwrap();
+        assert_eq!(copy.events.len(), 4);
+        assert_eq!(copy.events[0].keycode, HID_LCTRL);
+        assert!(!copy.events[0].is_up);
+        assert_eq!(copy.events[1].keycode, 0x06);
+        assert!(!copy.events[1].is_up);
+        assert_eq!(copy.events[2].keycode, 0x06);
+        assert!(copy.events[2].is_up);
+        assert_eq!(copy.events[3].keycode, HID_LCTRL);
+        assert!(copy.events[3].is_up);
+    }
 }
