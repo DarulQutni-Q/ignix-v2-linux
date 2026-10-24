@@ -69,25 +69,20 @@ else
 fi
 chmod +x "$INSTALL_DIR/ignix-f5"
 ln -sf "$INSTALL_DIR/ignix-f5" "$INSTALL_DIR/ignix-v2"
-ln -sf "$INSTALL_DIR/ignix-f5" "$INSTALL_DIR/ignix-gui"
+# No ignix-gui symlink on purpose: that name is the Rust tool's binary,
+# and a vendor-launcher symlink under it would shadow a locally built tool.
 
+# The icon file is 512x512, so it goes in exactly one place: the 512
+# hicolor directory. The old installer copied the same file into eight
+# size directories and into the data dir; neither copy was ever used.
 echo "Installing icon..."
+ICON_TARGET="$ICON_DIR/hicolor/512x512/apps/vortex-ignix.png"
+mkdir -p "$ICON_DIR/hicolor/512x512/apps"
+rm -f "$ICON_DIR/vortex-ignix.png"
 if [ -f "./assets/icon.png" ]; then
-    cp "./assets/icon.png" "$DATA_DIR/icon.png"
-    cp "./assets/icon.png" "$ICON_DIR/vortex-ignix.png"
-elif [ -f "$ICON_DIR/vortex-ignix.png" ]; then
-    cp "$ICON_DIR/vortex-ignix.png" "$DATA_DIR/icon.png"
-else
-    $DL -o "$DATA_DIR/icon.png" "https://raw.githubusercontent.com/$REPO/main/assets/icon.png" 2>/dev/null || true
-    [ -f "$DATA_DIR/icon.png" ] && cp "$DATA_DIR/icon.png" "$ICON_DIR/vortex-ignix.png"
-fi
-
-if [ -f "$ICON_DIR/vortex-ignix.png" ]; then
-    for s in 16 24 32 48 64 128 256 512; do
-        HICOLOR_TARGET="$ICON_DIR/hicolor/${s}x${s}/apps"
-        mkdir -p "$HICOLOR_TARGET"
-        cp "$ICON_DIR/vortex-ignix.png" "$HICOLOR_TARGET/vortex-ignix.png"
-    done
+    cp "./assets/icon.png" "$ICON_TARGET"
+elif [ ! -f "$ICON_TARGET" ]; then
+    $DL -o "$ICON_TARGET" "https://raw.githubusercontent.com/$REPO/main/assets/icon.png" 2>/dev/null || true
 fi
 
 echo "Installing desktop entry..."
