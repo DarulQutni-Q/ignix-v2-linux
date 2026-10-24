@@ -1,3 +1,5 @@
+use eframe::egui;
+
 mod app;
 mod device;
 mod protocol;
@@ -36,5 +38,4 @@ fn load_icon() -> Option<egui::IconData> {
     })
 }
 
-use eframe::egui;
 

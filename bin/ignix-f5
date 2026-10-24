@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Runner for VortexSeries IGNIX F5 / IGNIX V2 Mouse Driver
-# Reverse-engineered from official OEM Windows application (IGNIX V2-Setup-1.0.0.exe)
-# Runs natively on Linux via Electron & WebHID with zero Wine/emulation overhead
+# Launcher for the vendor IGNIX F5 app (app.asar) via system Electron.
 set -eo pipefail
 
 APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ignix-f5"
 ASAR_PATH="$APP_DIR/app.asar"
 
-# Verify that the package exists
 if [ ! -f "$ASAR_PATH" ]; then
     echo "Error: IGNIX F5 app package not found at $ASAR_PATH." >&2
     echo "Please install or reinstall using:" >&2
@@ -15,7 +12,6 @@ if [ ! -f "$ASAR_PATH" ]; then
     exit 1
 fi
 
-# Detect best available system Electron binary
 ELECTRON_BIN=""
 for candidate in electron39 electron42 electron43 electron44 electron; do
     if command -v "$candidate" >/dev/null 2>&1; then
@@ -33,7 +29,7 @@ if [ -z "$ELECTRON_BIN" ]; then
     exit 1
 fi
 
-# Wayland native integration with auto-fallback to X11/Xwayland
+# Wayland flags only when WAYLAND_DISPLAY is set; otherwise Electron defaults apply.
 EXTRA_FLAGS=()
 if [ -n "$WAYLAND_DISPLAY" ]; then
     EXTRA_FLAGS+=("--ozone-platform-hint=auto" "--enable-features=WaylandWindowDecorations")

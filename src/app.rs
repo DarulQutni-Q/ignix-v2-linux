@@ -236,8 +236,6 @@ const MOD_NAMES: [&str; 8] = [
 ];
 
 const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x00, 0xE5, 0x9C);
-const CARD_BG: egui::Color32 = egui::Color32::from_rgb(0x1D, 0x20, 0x2A);
-const CARD_STROKE: egui::Color32 = egui::Color32::from_rgb(0x2E, 0x33, 0x42);
 
 /// In-session macro slots (slot 1..=32). Names live only on the PC side.
 #[derive(Clone, Debug, Default)]
@@ -399,7 +397,7 @@ pub fn apply_style(ctx: &egui::Context) {
         &mut st.visuals.widgets.active,
         &mut st.visuals.widgets.open,
     ] {
-        w.rounding = egui::Rounding::same(6.0);
+        w.rounding = egui::Rounding::same(0.0);
     }
     st.spacing.item_spacing = egui::vec2(10.0, 10.0);
     st.spacing.button_padding = egui::vec2(14.0, 7.0);
@@ -407,25 +405,16 @@ pub fn apply_style(ctx: &egui::Context) {
     ctx.set_style(st);
 }
 
-fn card<R>(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui) -> R) {
-    egui::Frame::group(ui.style())
-        .fill(CARD_BG)
-        .stroke(egui::Stroke::new(1.0_f32, CARD_STROKE))
-        .rounding(egui::Rounding::same(10.0))
-        .inner_margin(egui::Margin::same(16.0))
-        .outer_margin(egui::Margin::same(2.0))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(
-                egui::RichText::new(title)
-                    .size(17.0)
-                    .strong()
-                    .color(ACCENT),
-            );
-            ui.add_space(8.0);
-            body(ui);
-        });
+/// One flat section: a hairline, an uppercase title in plain text, then the
+/// content. No filled card, no rounding. The accent colour is reserved for
+/// selection and the primary action only, never for headings.
+fn section<R>(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui) -> R) {
+    ui.separator();
     ui.add_space(6.0);
+    ui.label(egui::RichText::new(title.to_uppercase()).size(13.0).strong());
+    ui.add_space(8.0);
+    body(ui);
+    ui.add_space(12.0);
 }
 
 impl eframe::App for IgnixApp {
@@ -445,22 +434,19 @@ impl eframe::App for IgnixApp {
                 ui.columns(2, |cols| {
                     cols[0].horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("IGNIX V2")
-                                .size(22.0)
-                                .strong()
-                                .color(ACCENT),
+                            egui::RichText::new("IGNIX V2").size(20.0).strong(),
                         );
                         ui.add_space(8.0);
                         match (&self.state, &self.error) {
                             (Some(s), _) => {
-                                ui.colored_label(egui::Color32::from_rgb(0x35, 0xD6, 0x77), "Connected");
+                                ui.label("CONNECTED");
                                 ui.label(
                                     egui::RichText::new(format!("Firmware {}  ·  Profile {}", s.firmware, s.profile))
                                         .weak(),
                                 );
                             }
                             (None, Some(e)) => {
-                                ui.colored_label(egui::Color32::from_rgb(0xE5, 0x51, 0x4E), "Not connected");
+                                ui.label("NOT CONNECTED");
                                 ui.label(egui::RichText::new(e).weak());
                             }
                             (None, None) => {
@@ -479,7 +465,6 @@ impl eframe::App for IgnixApp {
                             self.busy = true;
                             let _ = self.tx.send(Cmd::Refresh);
                         }
-                        ui.label(egui::RichText::new("Battery: --").weak());
                     });
                 });
             });
@@ -497,7 +482,7 @@ impl eframe::App for IgnixApp {
                         [(Tab::Dpi, "DPI"), (Tab::Buttons, "Buttons"), (Tab::Macros, "Macros"), (Tab::Lighting, "Lighting"), (Tab::Performance, "Performance")]
                     {
                         let selected = self.tab == tab;
-                        let text = egui::RichText::new(label).size(17.0);
+                        let text = egui::RichText::new(label).size(15.0);
                         let text = if selected { text.strong().color(ACCENT) } else { text };
                         if ui.selectable_label(selected, text).clicked() {
                             self.tab = tab;
@@ -521,13 +506,13 @@ impl eframe::App for IgnixApp {
                         ))
                         .fill(if enabled { ACCENT } else { egui::Color32::from_rgb(0x2A, 0x2E, 0x39) })
                         .min_size(egui::vec2(170.0, 34.0))
-                        .rounding(egui::Rounding::same(8.0));
+                        .rounding(egui::Rounding::same(0.0));
                     if ui.add_enabled(enabled, apply_btn).clicked() {
                         self.apply();
                     }
                     if self.busy {
                         ui.spinner();
-                        ui.label("Working… (device I/O on background thread)");
+                        ui.label("Working…");
                     }
                     if ui
                         .add_enabled(self.state.is_some() && !self.busy, egui::widgets::Button::new("Refresh settings"))
@@ -544,13 +529,9 @@ impl eframe::App for IgnixApp {
                         .auto_shrink([false, true])
                         .show(ui, |ui| {
                             for (part, detail, ok) in &self.statuses {
-                                let (icon, color) = if *ok {
-                                    ("OK", egui::Color32::from_rgb(0x35, 0xD6, 0x77))
-                                } else {
-                                    ("FAILED", egui::Color32::from_rgb(0xE5, 0x51, 0x4E))
-                                };
+                                let icon = if *ok { "OK" } else { "FAILED" };
                                 ui.horizontal(|ui| {
-                                    ui.colored_label(color, egui::RichText::new(icon).strong());
+                                    ui.label(egui::RichText::new(icon).strong());
                                     ui.label(egui::RichText::new(part).strong());
                                     ui.label(egui::RichText::new(detail).weak());
                                 });
@@ -582,7 +563,7 @@ impl IgnixApp {
         let mut new_active: Option<usize> = None;
         let mut remove: Option<usize> = None;
         let mut add_stage = false;
-        card(ui, "DPI Stages", |ui| {
+        section(ui, "DPI Stages", |ui| {
             let state = self.state.as_mut().unwrap();
             let dpi = &mut state.dpi;
             ui.label("Click a stage radio to make it the active step.");
@@ -634,7 +615,7 @@ impl IgnixApp {
             let last = dpi.stages.last().copied().unwrap_or(DpiStage { dpi: 1600, color: [255, 255, 255] });
             dpi.stages.push(last);
         }
-        card(ui, "Sensor", |ui| {
+        section(ui, "Sensor", |ui| {
             let state = self.state.as_mut().unwrap();
             let dpi = &mut state.dpi;
             ui.checkbox(&mut dpi.angle_snap, "Angle snapping");
@@ -656,7 +637,7 @@ impl IgnixApp {
             self.no_device_msg(ui);
             return;
         };
-        card(ui, "Button Remap", |ui| {
+        section(ui, "Button Remap", |ui| {
             ui.label("Only the 6 physical buttons are exposed; every other slot is written back unchanged.");
             ui.add_space(6.0);
             egui::Grid::new("btn_grid")
@@ -706,7 +687,7 @@ impl IgnixApp {
     }
 
     fn ui_macros(&mut self, ui: &mut egui::Ui) {
-        card(ui, "Macro Slots", |ui| {
+        section(ui, "Macro Slots", |ui| {
             ui.label("Filled slots are uploaded on Apply, or per-slot below.");
             ui.add_space(6.0);
             egui::Grid::new("macro_slots")
@@ -721,7 +702,7 @@ impl IgnixApp {
                         };
                         let btn = egui::widgets::Button::new(label)
                             .min_size(egui::vec2(52.0, 30.0))
-                            .rounding(egui::Rounding::same(6.0));
+                            .rounding(egui::Rounding::same(0.0));
                         let resp = ui.add(btn);
                         if filled {
                             let rect = resp.rect.expand2(egui::vec2(-4.0, -4.0));
@@ -742,7 +723,7 @@ impl IgnixApp {
         let mut upload: Option<Macro> = None;
         let mut clear_slot = false;
         let mut preset: Option<usize> = None;
-        card(ui, format!("Slot {} — Editor", slot_no).as_str(), |ui| {
+        section(ui, format!("Slot {} — Editor", slot_no).as_str(), |ui| {
             let slot = &mut self.macros[i];
             ui.horizontal(|ui| {
                 ui.add(
@@ -804,11 +785,11 @@ impl IgnixApp {
                         match &mut ev.kind {
                             MacroKind::Press(code) | MacroKind::Release(code) => {
                                 ui.add(egui::DragValue::new(code).range(0..=255));
-                                ui.colored_label(egui::Color32::GRAY, hid_label(*code));
+                                ui.label(egui::RichText::new(hid_label(*code)).weak());
                             }
                             MacroKind::Click(btn) => {
                                 ui.add(egui::DragValue::new(btn).range(0..=4));
-                                ui.colored_label(egui::Color32::GRAY, mouse_btn_code_text(*btn));
+                                ui.label(egui::RichText::new(mouse_btn_code_text(*btn)).weak());
                             }
                             MacroKind::Wait => {
                                 ui.label("");
@@ -854,13 +835,10 @@ impl IgnixApp {
                 };
                 let filled = !slot.events.is_empty();
                 if ui
-                    .add_enabled(!slot.events.is_empty(), egui::widgets::Button::new(egui::RichText::new("Upload this slot").strong()))
+                    .add_enabled(filled, egui::widgets::Button::new(egui::RichText::new("Upload this slot").strong()))
                     .clicked()
                 {
                     upload = Some(m);
-                }
-                if filled {
-                    let _ = filled;
                 }
             });
         });
@@ -890,7 +868,7 @@ impl IgnixApp {
             self.no_device_msg(ui);
             return;
         };
-        card(ui, "Lighting", |ui| {
+        section(ui, "Lighting", |ui| {
             let state = self.state.as_mut().unwrap();
             let light = &mut state.light;
             egui::Grid::new("light_modes")
@@ -924,7 +902,7 @@ impl IgnixApp {
                 }
             }
         });
-        card(ui, "Power & Debounce", |ui| {
+        section(ui, "Power & Debounce", |ui| {
             let state = self.state.as_mut().unwrap();
             let light = &mut state.light;
             egui::Grid::new("sleep")
@@ -948,7 +926,7 @@ impl IgnixApp {
             self.no_device_msg(ui);
             return;
         };
-        card(ui, "Polling Rate", |ui| {
+        section(ui, "Polling Rate", |ui| {
             let state = self.state.as_mut().unwrap();
             ui.horizontal(|ui| {
                 for (hz, code) in [(125u16, 8u8), (250, 4), (500, 2), (1000, 1)] {
@@ -961,7 +939,7 @@ impl IgnixApp {
                 }
             });
         });
-        card(ui, "Profile", |ui| {
+        section(ui, "Profile", |ui| {
             let state = self.state.as_mut().unwrap();
             ui.label(format!("Editing profile {} (each profile stores its own DPI, lighting, etc.)", state.profile));
             ui.add_space(4.0);
@@ -976,9 +954,8 @@ impl IgnixApp {
                     }
                 }
             });
-            let _ = &state;
         });
-        card(ui, "Device Info", |ui| {
+        section(ui, "Device Info", |ui| {
             let state = self.state.as_mut().unwrap();
             egui::Grid::new("info")
                 .spacing([24.0, 8.0])
@@ -988,9 +965,6 @@ impl IgnixApp {
                     ui.end_row();
                     ui.label(egui::RichText::new("Identity").weak());
                     ui.label("Xenta F5V2 (deviceId 174), VID 1D57");
-                    ui.end_row();
-                    ui.label(egui::RichText::new("Battery").weak());
-                    ui.label("--");
                     ui.end_row();
                 });
         });

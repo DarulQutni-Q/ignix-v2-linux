@@ -16,7 +16,7 @@ The **VortexSeries IGNIX F5** (part of the IGNIX V2 lineup powered by the PixArt
   - Official Portal: `https://vortexseries.net/support/webdriver`
   - Direct Web Driver URL: `https://inputdrv.com/IGNIX` (and OEM partner mirror `https://inputdrv.com/Attack-Shark`)
 
-Because the driver communicates exclusively via standardized **WebHID reports**, it runs **100% natively on Linux** via Electron or Chromium-based browsers with zero emulation or Wine required once `udev` permissions are configured.
+Because the driver communicates via standardized WebHID reports, it can run on Linux via Electron or Chromium-based browsers without Wine, once `udev` permissions are configured.
 
 ---
 
@@ -92,11 +92,11 @@ Received on the listener endpoint (`usagePage: 10`, `inputreport` event):
   - `2`: Fully charged
   - `3`: Currently charging
 - `Byte 3`: Battery level index (1 to 10):
-  $$\text{Battery Percentage} = \text{level} \times 10\%$$
+  Battery percentage = level x 10%. Level 10 means full in this scale, not a measured percentage from the cell.
 
 ---
 
 ## 7. Write Pacing & Cable Mode Notes
 
-- **2.4G Wireless Dongle (`1d57:fa60`):** Fast non-blocking transfers with immediate readback verification.
-- **Wired Cable (`1d57:22ae`):** The onboard microcontroller temporarily halts HID endpoint processing during EEPROM writes, resulting in transient USB stalls (`EPIPE` / Broken pipe). The driver handles this gracefully with exponential backoff (up to 6 retries × 300 ms).
+- **2.4G Wireless Dongle (`1d57:fa60`):** Transfers complete without the wired stalls below, and readback verification succeeds.
+- **Wired Cable (`1d57:22ae`):** The onboard microcontroller temporarily halts HID endpoint processing during EEPROM writes, resulting in transient USB stalls (`EPIPE` / Broken pipe). The Rust tool retries on this error (up to 6 retries, 300 ms apart).

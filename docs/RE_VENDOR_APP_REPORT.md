@@ -12,7 +12,7 @@ Earlier community efforts created a custom prototype GUI from scratch in Rust (`
 
 By reverse-engineering the official Windows installer (`IGNIX V2-Setup-1.0.0.exe`), we discovered that the vendor software is not a Win32/WPF native program, but a modern **Next.js + WebHID application** bundled inside an Electron shell.
 
-Because WebHID is a W3C cross-platform standard that maps directly to Linux `/dev/hidraw*` character devices, the entire official vendor application can run **100% natively on Linux** via system Electron with zero Wine, zero emulation, and zero latency overhead.
+Because WebHID is a W3C cross-platform standard that maps to Linux `/dev/hidraw*` character devices, the vendor application can run on Linux via system Electron without Wine. No latency measurement was done, so no latency claim is made here.
 
 ---
 
@@ -27,6 +27,8 @@ Extraction using `7z`:
 Extracted structure:
 - `$PLUGINSDIR/app-64.7z` (64-bit Electron runtime + resources)
 - Unpacking `app-64.7z` yielded `resources/app.asar` (67.1 MB).
+
+Note: `app.asar` itself is not committed to this repo. It is distributed as an asset of release `v2.0.0`. The steps below describe what was extracted from the vendor installer, not a file you will find in this tree.
 
 ### Step 2: ASAR Archive Inspection
 Using `npx asar extract app.asar asar_extracted`, we analyzed the bundled architecture:
@@ -55,7 +57,7 @@ When running via system Electron (`electron /path/to/app.asar`), the official Ne
 
 ## 4. Key Findings & Hardware Validation
 
-1. **Native Performance:** Because WebHID issues direct `ioctl(HIDIOCSFEATURE)` and `ioctl(HIDIOCGFEATURE)` system calls, latency is identical to native C/Rust programs.
-2. **Real-Time Battery Monitoring:** Discovered the listener endpoint on collection `0x000A` receiving asynchronous `inputreport` packets with battery charge levels (1-10 scale = 10%-100%).
+1. **Transport:** WebHID issues `ioctl(HIDIOCSFEATURE)` and `ioctl(HIDIOCGFEATURE)` system calls, the same calls a native program would use. That says nothing about UI latency, which was not measured.
+2. **Battery reporting:** Discovered the listener endpoint on collection `0x000A` receiving asynchronous `inputreport` packets with battery charge levels (1-10 scale = 10%-100%).
 3. **Macro Engine Compatibility:** Verified that the official macro compiler formats delay units in 10ms intervals with long-delay extension headers, eliminating macro drift.
-4. **Wayland Support:** With modern Electron runtime flags (`--ozone-platform-hint=auto`), the official UI renders smoothly on Wayland compositors (Niri, Hyprland, Sway, GNOME Wayland).
+4. **Wayland Support:** The launcher passes `--ozone-platform-hint=auto` and `--enable-features=WaylandWindowDecorations` when `WAYLAND_DISPLAY` is set. Wayland behaviour was not verified on every compositor listed in older versions of this doc.
