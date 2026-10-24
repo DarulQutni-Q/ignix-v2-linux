@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Runner for VortexSeries IGNIX F5 / IGNIX V2 Mouse Driver
+# Reverse-engineered from official OEM Windows application (IGNIX V2-Setup-1.0.0.exe)
+# Runs natively on Linux via Electron & WebHID with zero Wine/emulation overhead
+set -eo pipefail
+
+APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ignix-f5"
+ASAR_PATH="$APP_DIR/app.asar"
+
+# Verify that the package exists
+if [ ! -f "$ASAR_PATH" ]; then
+    echo "Error: IGNIX F5 app package not found at $ASAR_PATH." >&2
+    echo "Please install or reinstall using:" >&2
+    echo "  curl -fsSL https://raw.githubusercontent.com/DarulQutni-Q/ignix-v2-linux/main/install.sh | bash" >&2
+    exit 1
+fi
+
+# Detect best available system Electron binary
+ELECTRON_BIN=""
+for candidate in electron39 electron42 electron43 electron44 electron; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        ELECTRON_BIN="$candidate"
+        break
+    fi
+done
+
+if [ -z "$ELECTRON_BIN" ]; then
+    echo "Error: No compatible Electron binary found on your system." >&2
+    echo "Please install electron using your package manager:" >&2
+    echo "  Arch / CachyOS : sudo pacman -S electron" >&2
+    echo "  Ubuntu / Debian: sudo apt install electron (or install via npm)" >&2
+    echo "  Fedora         : sudo dnf install electron" >&2
+    exit 1
+fi
+
+# Wayland native integration with auto-fallback to X11/Xwayland
+EXTRA_FLAGS=()
+if [ -n "$WAYLAND_DISPLAY" ]; then
+    EXTRA_FLAGS+=("--ozone-platform-hint=auto" "--enable-features=WaylandWindowDecorations")
+fi
+
+exec "$ELECTRON_BIN" "$ASAR_PATH" "${EXTRA_FLAGS[@]}" "$@"

@@ -1,0 +1,15 @@
+# VortexSeries IGNIX F5 / IGNIX V2 Gaming Mouse (PixArt PAW3315)
+# Grants non-root access to HID raw interfaces for WebHID / Electron driver and CLI tools
+#
+# Installation:
+#   sudo cp 99-ignix.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+# Then unplug/replug the mouse or 2.4G wireless dongle.
+
+# Wired USB Mode (VID: 0x1D57, PID: 0x22AE - IGNIX F5V2)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1d57", ATTRS{idProduct}=="22ae", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d57", ATTRS{idProduct}=="22ae", MODE="0666", TAG+="uaccess"
+
+# 2.4 GHz Wireless Dongle Mode (VID: 0x1D57, PID: 0xFA60 - LXDDZ Receiver)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1d57", ATTRS{idProduct}=="fa60", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d57", ATTRS{idProduct}=="fa60", MODE="0666", TAG+="uaccess"

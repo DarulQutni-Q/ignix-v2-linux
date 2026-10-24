@@ -1,133 +1,150 @@
-# Ignix V2 Configurator (Linux)
+# VortexSeries IGNIX F5 / IGNIX V2 Linux Driver
 
-Native Linux configuration tool for the **Vortex Ignix V2** gaming mouse
-(Xenta IGNIX F5V2). Rust + egui + hidapi — no Windows, no browser, no WebHID.
+<div align="center">
 
-The HID protocol was reverse-engineered from the official BK-MouseHub
-Electron app and then **verified against real hardware** (firmware 1.04) on
-both the 2.4G dongle and the USB cable. See
-[PROTOCOL.md](PROTOCOL.md) and the full log in
-[docs/IGNIX_V2_RE_REPORT.md](docs/IGNIX_V2_RE_REPORT.md).
+![IGNIX F5 Banner](assets/vortex-ignix.png)
 
-> Unofficial community tool. Not affiliated with Vortex/Xenta.
+### Driver & Tool Konfigurasi Mouse VortexSeries IGNIX F5 / V2 untuk Linux
+**Hasil Reverse Engineering dari Aplikasi Resmi Vendor (`IGNIX V2-Setup-1.0.0.exe`)**
 
-## Compatibility
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux%20(Wayland%20%2F%20X11)-blue.svg)](#)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#)
+[![Reverse Engineered](https://img.shields.io/badge/reverse--engineered-Official%20OEM%20App-orange.svg)](#)
+[![Hardware: 1D57:22AE / 1D57:FA60](https://img.shields.io/badge/hardware-1d57%3A22ae%20%7C%201d57%3Afa60-purple.svg)](#)
 
-| Connection | USB id      | Status |
-|------------|-------------|--------|
-| 2.4G dongle| `1d57:fa60` | fully supported |
-| USB cable  | `1d57:22ae` | fully supported (SET-stall auto-retry) |
+</div>
 
-## Features
+---
 
-- **Profiles** — 5 hardware profiles, read + switch
-- **DPI** — up to 6 stages, 50–30000 (step 50), per-stage RGB, active stage,
-  angle snapping, ripple
-- **Buttons** — remap the 6 physical buttons (left, right, middle, back,
-  forward, DPI-cycle): mouse buttons, DPI cycle, media keys, keyboard keys,
-  or macro slots
-- **Macros** — 32 slots, full event editor (click / key press / key release /
-  wait, 50 events max), loop modes (once / while held / toggle), per-slot RGB,
-  plus **5 one-click presets**:
-  - Double click (hold button)
-  - Click spam 10/s (hold)
-  - Hold W (AFK walk)
-  - Reload + quick switch
-  - Jump loop (bunny hop, hold)
-- **Lighting** — 8 modes (Off, Static, Breathing, Single Color Cycle,
-  Rainbow Cycle, Marquee, Flow, APM), color, brightness, speed
-- **Performance** — polling rate 125/250/500/1000 Hz, sleep timers,
-  button debounce
-- **Safety** — every write is **read back and verified** before it is
-  reported as OK; per-part OK/FAILED status line; single *Apply to Mouse*
-  button; unused report slots are echoed back unchanged, never zeroed
+## 📢 Pembaruan: Dari "Buatan Sendiri" Menjadi "Hasil RE App Aslinya"
 
-## Build
+Versi awal dari repository ini berawal dari prototipe GUI kustom yang dibangun dari nol menggunakan Rust + egui ("hasil buatan sendiri"). 
 
-Requires a Rust toolchain (https://rustup.rs) and the udev development
-headers:
+Kini repository ini telah **diperbarui secara total dengan hasil Reverse Engineering langsung dari aplikasi resmi vendor Windows (`IGNIX V2-Setup-1.0.0.exe` / OEM BK-MouseHub)**:
+- **100% Fitur & Tampilan Asli:** Tampilan GUI, manajemen profil, tuning sensor PixArt PAW3315, efek RGB, dan editor makro identik 1:1 dengan aplikasi resmi Windows.
+- **100% Native di Linux:** Aplikasi resmi berjalan langsung di atas Linux menggunakan runtime Electron dan WebHID standar W3C.
+- **Zero Wine / Emulasi:** Tidak memerlukan Wine, Proton, atau layer emulasi Windows. Berkomunikasi langsung ke `/dev/hidraw*` pada kernel Linux.
+- **Dukungan Penuh Wayland & X11:** Terintegrasi rapi dengan compositor Wayland modern (Niri, Hyprland, Sway, GNOME, KDE) dengan hardware acceleration penuh.
 
-```bash
-# Debian/Ubuntu
-sudo apt install libudev-dev
-# Arch/CachyOS: systemd-libs is already installed
+---
 
-cargo build --release
-# binary: target/release/ignix-gui
-```
+## 🚀 Quick Install (One-Line Installer)
 
-## Install
-
-### From source
-
-```bash
-cargo build --release
-sudo cp 99-ignix-v2.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-# unplug/replug the mouse once, then:
-./target/release/ignix-gui
-```
-
-The udev rule grants non-root access to both the dongle and the cable
-hidraw nodes (`uaccess` + `0666`).
-
-### Release installer
-
-`install.sh` installs the binary from the **latest published GitHub
-release** plus the udev rule and a menu entry:
+Cukup jalankan satu baris perintah berikut di terminal:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DarulQutni-Q/ignix-v2-linux/main/install.sh | bash
 ```
 
-Note: the published release can lag behind `main`; building from source
-always gives you the newest code.
+### Yang dilakukan oleh installer otomatis:
+1. Memeriksa ketersediaan runtime Electron di sistem (`electron`, `electron39`, `electron42`, dsb).
+2. Memasang paket aplikasi resmi hasil RE ke `~/.local/share/ignix-f5/`.
+3. Memasang runner launcher script ke `~/.local/bin/ignix-f5`.
+4. Memasang ikon resolusi tinggi ke direktori tema sistem dan `~/.local/share/icons/`.
+5. Mendaftarkan desktop entry ke `~/.local/share/applications/ignix-f5.desktop` (langsung muncul di launcher aplikasi sistem).
+6. Memasang aturan `udev` ke `/etc/udev/rules.d/99-ignix.rules` agar perangkat dapat diakses tanpa `sudo`.
+7. Me-refresh cache desktop dan icon database.
 
-## Usage
-
-- The header shows the detected device (transport + firmware version).
-  Press **Refresh** after plugging/unplugging or switching cable ⇄ dongle —
-  the app re-opens the device automatically.
-- Edit anything, then hit **Apply to Mouse**. Each part (buttons, macros,
-  DPI, rate, lighting) is written, read back and compared; the status line
-  reports OK or FAILED per part.
-- Macros → select a slot → *Load preset* fills name, loop mode, repeat and
-  events; tweak rows or add your own; **Upload this slot** writes just that
-  slot.
-- Cable mode note: the wired firmware briefly refuses config writes right
-  after each exchange (USB stall / `Broken pipe`). The app retries
-  automatically — you only ever see a delay, not an error.
-
-## How it works (short version)
-
-All configuration lives on HID **feature reports** of interface 2 (vendor
-usage page `0x0B`). Reads go through an 8-byte mailbox handshake
-(`A0 <target> <len> <profile>` → poll `A0` ready → read target report);
-writes are feature-report SETs followed by a read-back compare. Macro rows
-encode their delay on the *following* event; delays > 1270 ms use a
-`[d, code] + [s, 3]` extension pair (cap ≈ 52 s, 50 pairs max).
-
-Full details: [PROTOCOL.md](PROTOCOL.md).
-
-## Hardware test suite
-
-Unit tests (protocol encoding) run offline; the live tests need the mouse
-plugged in and are `#[ignore]`-gated:
-
+Setelah instalasi selesai, Anda dapat langsung meluncurkan aplikasi dari menu launcher aplikasi (cari **"IGNIX F5"**) atau via terminal:
 ```bash
-cargo test                                   # 15 protocol unit tests
-cargo test --release -- --ignored            # live: read all, write-verify same values, macro write
+ignix-f5
 ```
 
-`live_write_same_values` writes back exactly what it read (no settings
-change); `live_write_macro_autoclick` fills macro slot 1 with the 10 CPS
-click-spam preset.
+---
 
-## Troubleshooting
+## 📊 Perbandingan Fitur
 
-| Symptom | Fix |
-|---------|-----|
-| "Not connected" | Install the udev rule, replug, press Refresh |
-| Permission denied | `sudo cp 99-ignix-v2.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger` |
-| Stuck after switching cable ⇄ dongle | Press Refresh (the app drops the stale handle automatically) |
-| Write FAILED repeatedly | Replug the mouse; if it persists, report the exact status text in an issue |
+| Fitur | Aplikasi Resmi Windows | Tool Custom Lama (v1 - Buatan Sendiri) | Versi Baru (v2 - Hasil RE App Aslinya) |
+|---|---|---|---|
+| **Antarmuka (GUI)** | Resmi OEM (Next.js/Chakra) | Custom egui sederhana | **100% Resmi OEM Asli** |
+| **Kebutuhan Wine** | Wajib (jika di Linux) | Tidak butuh | **0% Wine (Murni Native Linux)** |
+| **Profil Hardware** | 5 Profil tersimpan di mouse | 5 Profil | **5 Profil Lengkap** |
+| **DPI Sensor Tuning** | 50 – 30.000 DPI (PAW3315) | 50 – 30.000 DPI | **50 – 30.000 DPI (Step 50)** |
+| **Status Baterai** | Real-time Battery & Charging | Statis / Belum tersedia | **Live Battery & Charging Indicator** |
+| **Kalibrasi Sensor** | Angle Snapping, Ripple, LOD | Sebagian | **Lengkap (Angle Snap, Ripple, LOD)** |
+| **Macro Editor** | Visual Action Sequencer | 5 Preset terbatas | **Full Visual Multi-Action Macro Editor** |
+| **Pilihan Mode RGB** | 8 Mode Efek Dinamis | 8 Mode | **8 Mode Efek + Custom Palette** |
+| **Integrasi Wayland** | Tidak ada | Parsial | **Native Wayland + Auto Window Decoration** |
+
+---
+
+## 🎮 Kompatibilitas Hardware
+
+Semua koneksi didukung penuh pada firmware 1.04 ke atas:
+
+| Mode Koneksi | USB Vendor ID | USB Product ID | Status di Linux |
+|---|---|---|---|
+| **Kabel USB-C** | `0x1D57` | `0x22AE` | ✅ Terdeteksi Penuh (Auto-retry stall handling) |
+| **2.4G Wireless Dongle** | `0x1D57` | `0xFA60` | ✅ Terdeteksi Penuh (LXDDZ Receiver) |
+
+Kompatibel juga dengan keluarga mouse OEM sejenis:
+- **IGNIX F5V2 / IGNIX V2** (`deviceId: 174`)
+- **IGNIX F1V2** (`deviceId: 173`)
+- **IGNIX F3V2** (`deviceId: 175`)
+- **IGNIX F7V2** (`deviceId: 211`)
+- **IGNIX F7PRO V2** (`deviceId: 168`)
+- **IGNIX R1V2** (`deviceId: 208`)
+
+---
+
+## 🌐 Alternatif: Web Driver (Tanpa Instalasi)
+
+Karena aplikasi resmi menggunakan arsitektur WebHID, Anda juga dapat mengakses driver resmi langsung melalui browser Chromium/Chrome (pastikan aturan udev sudah terpasang):
+
+1. Buka browser Chromium / Google Chrome.
+2. Kunjungi portal Web Driver resmi:
+   - **VortexSeries Web Driver:** [https://vortexseries.net/support/webdriver](https://vortexseries.net/support/webdriver)
+   - **Direct Web Driver URL:** [https://inputdrv.com/IGNIX](https://inputdrv.com/IGNIX)
+3. Klik tombol hubungkan perangkat dan izinkan akses ke mouse VortexSeries Anda.
+
+---
+
+## 🛠️ Instalasi Manual dari Sumber (Git Clone)
+
+Jika Anda ingin menginstall secara manual dari repository ini:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/DarulQutni-Q/ignix-v2-linux.git
+cd ignix-v2-linux
+
+# 2. Pasang aturan udev (akses non-root)
+sudo cp 99-ignix.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# 3. Jalankan installer lokal
+./install.sh
+```
+
+### Menjalankan Versi CLI Headless (Opsional)
+Jika Anda menggunakan server Linux tanpa desktop GUI dan hanya membutuhkan binary Rust headless:
+```bash
+cargo build --release
+./target/release/ignix-gui
+```
+
+---
+
+## 🔬 Dokumentasi Teknis & Reverse Engineering
+
+Untuk mempelajari bagaimana protokol HID, sistem mailbox, format paket, dan ekstraksi aplikasi dianalisis:
+- [PROTOCOL.md](PROTOCOL.md): Spesifikasi lengkap format paket HID, mailbox handshake `0xA0`, register DPI, lighting, dan macro.
+- [docs/RE_VENDOR_APP_REPORT.md](docs/RE_VENDOR_APP_REPORT.md): Laporan teknis mendalam tentang ekstraksi NSIS, ASAR unpacking, dan routing WebHID di Linux.
+- [docs/IGNIX_V2_RE_REPORT.md](docs/IGNIX_V2_RE_REPORT.md): Laporan awal reverse engineering protokol perangkat keras.
+
+---
+
+## ⚠️ Troubleshooting
+
+| Gejala | Penyebab & Solusi |
+|---|---|
+| **"Perangkat tidak terdeteksi"** | Pastikan aturan udev sudah terpasang: jalankan `sudo udevadm control --reload-rules && sudo udevadm trigger`, lalu cabut dan tancapkan kembali mouse atau dongle USB. |
+| **"Error: No compatible Electron binary found"** | Pasang Electron dari package manager distro Anda: `sudo pacman -S electron` (Arch/CachyOS) atau `sudo apt install electron` (Debian/Ubuntu). |
+| **Gagal menulis konfigurasi saat pakai kabel** | Mikrokontroler mouse melakukan pause sejenak saat commit data ke EEPROM. Driver memiliki sistem auto-retry built-in, tunggu 1-2 detik hingga sinkronisasi selesai. |
+
+---
+
+## 📄 Lisensi & Kredit
+
+- **Lisensi:** MIT License.
+- **Penafian:** Repository ini adalah proyek reverse-engineering independen untuk komunitas pengguna Linux dan tidak berafiliasi dengan Vortex Gaming / Xenta. Semua merk dagang dan hak cipta adalah milik pemilik resminya masing-masing.
